@@ -1,7 +1,10 @@
 ---
 name: Fehler melden
 about: Etwas funktioniert nicht wie erwartet
+title: ''
 labels: bug
+assignees: ''
+
 ---
 
 **easyTTY-Version** (Einstellungen → unten):
