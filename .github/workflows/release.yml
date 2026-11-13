@@ -1,0 +1,47 @@
+# Push a tag like v1.0.0: tests, Windows exe, portable zip, checksums, GitHub release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod # the exe embeds this standard library
+      - run: go test -count=1 ./...
+      - name: Exe und Portable-Zip bauen
+        shell: bash
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json \
+            --product-version "${VERSION}" --file-version "${VERSION}"
+          go build -tags desktop,production -trimpath \
+            -ldflags "-w -s -H windowsgui -X main.appVersion=${VERSION}" -o easyTTY.exe .
+          mkdir -p release dist/easyTTY
+          cp easyTTY.exe dist/easyTTY/
+          cp LICENSE dist/easyTTY/
+          cat > dist/easyTTY/easyTTY.portable <<'EOF'
+          easyTTY portabel: Solange diese Datei neben easyTTY.exe liegt, speichert easyTTY
+          alles im Ordner easyTTY-data daneben. Details: docs/INSTALL.md im Projekt.
+          EOF
+          (cd dist && 7z a -bd "../release/easyTTY-${VERSION}-portable.zip" easyTTY >/dev/null)
+          mv easyTTY.exe "release/easyTTY-${VERSION}.exe"
+          (cd release && sha256sum * > SHA256SUMS.txt)
+      - name: Prüfsummen signieren
+        shell: bash
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: go run ./tools/signsums release/SHA256SUMS.txt
+      - uses: softprops/action-gh-release@28ab305d0ffa26d60ec4bd614126329e26c7a0ec # v3.0.4
+        with:
+          files: release/*
+          generate_release_notes: true

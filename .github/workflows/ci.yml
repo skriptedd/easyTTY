@@ -1,0 +1,32 @@
+# Runs on every push and pull request. Windows, because the app is Windows-only
+# and the root package's tests need it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod # the exe embeds this standard library
+      - name: Formatierung
+        shell: bash
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - name: Bekannte Schwachstellen
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Exe bauen
+        shell: bash
+        run: |
+          go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --product-version 0.0.0 --file-version 0.0.0
+          go build -tags desktop,production -trimpath -ldflags "-w -s -H windowsgui -X main.appVersion=ci-${GITHUB_SHA::7}" -o easyTTY.exe .
