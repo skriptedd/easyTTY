@@ -18,7 +18,11 @@ func main() {
 	if isBridgeMode() {
 		os.Exit(runBridge())
 	}
+	if target, ok := finishUpdateTarget(); ok {
+		os.Exit(runFinishUpdate(target))
+	}
 	startCrashLog()
+	removeUpdateLeftovers()
 	app := NewApp()
 	webviewData := "" // default: %APPDATA%\easyTTY.exe
 	if dir, ok := portableDir(); ok {

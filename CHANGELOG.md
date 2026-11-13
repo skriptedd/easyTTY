@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.3.1 (2026-11-13)
+
+### Behoben
+
+- Nach einem Update war das an die Taskleiste angeheftete Symbol weg. Das Update
+  benennt `easyTTY.exe` nicht mehr um, sondern schreibt die neue Version in dieselbe
+  Datei, sobald die alte beendet ist. Wirkt ab dem Update, das von dieser Version aus
+  startet.
+
 ## 0.3.0 (2026-11-13)
 
 Erste öffentliche Version auf GitHub.

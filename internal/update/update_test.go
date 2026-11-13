@@ -301,38 +301,6 @@ func TestGithubAssetsMayComeFromGithubHosts(t *testing.T) {
 	}
 }
 
-func TestSwapReplacesExeAndKeepsOld(t *testing.T) {
-	dir := t.TempDir()
-	exe, fresh := filepath.Join(dir, "easyTTY.exe"), filepath.Join(dir, "new.tmp")
-	write(t, exe, "old")
-	write(t, fresh, "new")
-	write(t, OldName(exe), "leftover of an earlier update")
-
-	err := Swap(exe, fresh)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	if read(t, exe) != "new" || read(t, OldName(exe)) != "old" {
-		t.Errorf("exe %q, old %q", read(t, exe), read(t, OldName(exe)))
-	}
-}
-
-func TestSwapRollsBackWhenNewFileIsMissing(t *testing.T) {
-	dir := t.TempDir()
-	exe := filepath.Join(dir, "easyTTY.exe")
-	write(t, exe, "old")
-
-	err := Swap(exe, filepath.Join(dir, "missing.tmp"))
-
-	if err == nil {
-		t.Fatal("swap without new file succeeded")
-	}
-	if read(t, exe) != "old" {
-		t.Errorf("exe not restored: %q", read(t, exe))
-	}
-}
-
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

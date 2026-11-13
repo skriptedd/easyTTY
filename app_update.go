@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"easytty/internal/store"
@@ -125,7 +124,7 @@ func (a *App) InstallUpdate(version string) error {
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
-	fresh := strings.TrimSuffix(exe, ".exe") + ".new.exe"
+	fresh := update.NewName(exe)
 	if err := c.Download(ctx, rel, fresh, a.updateProgress()); err != nil {
 		return err
 	}
@@ -135,11 +134,9 @@ func (a *App) InstallUpdate(version string) error {
 		os.Remove(fresh)
 		return fmt.Errorf("Sicherung vor dem Update fehlgeschlagen, nichts geändert: %w", err)
 	}
-	if err := update.Swap(exe, fresh); err != nil {
-		os.Remove(fresh)
-		return err
-	}
-	a.restartWith(exe)
+	// easyTTY.exe is overwritten by the new version once this one has quit
+	// (see app_finishupdate.go). Renaming it would drop taskbar pins.
+	a.restartWith(fresh, finishUpdateFlag, exe)
 	return nil
 }
 
@@ -157,11 +154,11 @@ func (a *App) updateProgress() func(done, total int64) {
 	}
 }
 
-// restartWith closes the window without asking and starts exe once
+// restartWith closes the window without asking and runs cmd once
 // everything is shut down.
-func (a *App) restartWith(exe string) {
+func (a *App) restartWith(cmd ...string) {
 	a.mu.Lock()
-	a.relaunch = exe
+	a.relaunch = cmd
 	a.mu.Unlock()
 	a.quit()
 }
@@ -169,13 +166,13 @@ func (a *App) restartWith(exe string) {
 // relaunchIfWanted runs at the very end of shutdown.
 func (a *App) relaunchIfWanted() {
 	a.mu.Lock()
-	exe := a.relaunch
+	args := a.relaunch
 	a.mu.Unlock()
-	if exe == "" {
+	if len(args) == 0 {
 		return
 	}
-	cmd := exec.Command(exe)
-	cmd.Dir = filepath.Dir(exe)
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = filepath.Dir(args[0])
 	if err := cmd.Start(); err == nil {
 		_ = cmd.Process.Release()
 	}
@@ -184,5 +181,5 @@ func (a *App) relaunchIfWanted() {
 func (a *App) restarting() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.relaunch != ""
+	return len(a.relaunch) > 0
 }

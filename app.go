@@ -55,7 +55,7 @@ type App struct {
 	fwEvents   []fwserver.Event
 	auto       *automation.Engine // scheduled tasks (nil if the store failed to load)
 	rdp        *rdpview.Host      // RDP controls inside the window, started on first use
-	relaunch   string             // exe to start after shutdown (set by an update)
+	relaunch   []string           // command to run after shutdown (set by an update)
 	settingsMu sync.Mutex         // one read-modify-write of settings.json at a time
 	updating   atomic.Bool
 

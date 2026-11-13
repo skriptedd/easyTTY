@@ -89,12 +89,14 @@ Start lässt sich dort abschalten.
 
 Vor jedem Update kopiert easyTTY Sessions, Einstellungen, `known_hosts` und Aufgaben
 nach `backups\<Version>_<Datum>` im Datenordner, die letzten fünf bleiben. Die vorige
-Exe bleibt als `easyTTY.old.exe` daneben liegen.
+Exe bleibt als `easyTTY.old.exe` daneben liegen. Die neue Version wird in die
+bestehende `easyTTY.exe` geschrieben, die Datei wird nicht umbenannt: Verknüpfungen
+und an die Taskleiste angeheftete Symbole bleiben erhalten.
 
 **Zurück zur vorigen Version:** easyTTY schließen, `easyTTY.exe` löschen,
 `easyTTY.old.exe` in `easyTTY.exe` umbenennen. Hat die neue Version die Daten schon
 geändert, die Dateien aus dem passenden `backups`-Ordner zurück in den Datenordner
-kopieren.
+kopieren. Ein an die Taskleiste angeheftetes Symbol danach neu anheften.
 
 Liegt die Exe in einem Ordner ohne Schreibrecht, klappt das nicht. Dann die neue
 Exe herunterladen und die alte ersetzen. Einstellungen und Sessions bleiben in
