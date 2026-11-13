@@ -1,6 +1,8 @@
 # Änderungen
 
-## Unveröffentlicht
+## 0.3.0 (2026-11-13)
+
+Erste öffentliche Version auf GitHub.
 
 ### Neu
 
