@@ -4,11 +4,15 @@ import { closeX, contextMenu, h, makeSplitter, modal, toast } from "./ui.js";
 import { keyAction } from "./keys.js";
 import { editPaste } from "./pasteDialog.js";
 import { openConfigDiff } from "./configDiff.js";
-import { Highlighter } from "./highlight.js";
+import { HOLD_MS, Highlighter } from "./highlight.js";
 import { SftpPanel } from "./sftp.js";
+import { showSSHInfo } from "./sshInfo.js";
 
 /** Drag data of a tab or tile; the value is the tab id. */
 export const TAB_DRAG = "application/x-easytty-tab";
+
+/** More saved files than this open as their folder, not one window each. */
+const MAX_OPEN_FILES = 8;
 
 const THEMES = {
   dark: {
@@ -58,9 +62,21 @@ export class Tab {
     this.subs = [events.on("term:data:" + this.id, (b64) => {
       const bytes = b64ToBytes(b64);
       // The backend counts bytes for flow control, whatever is written here.
-      if (this.hl.active) this.term.write(this.hl.push(this.decoder.decode(bytes, { stream: true })), () => this.ack(bytes.length));
-      else this.term.write(bytes, () => this.ack(bytes.length));
+      if (this.hl.active) {
+        this.term.write(this.hl.push(this.decoder.decode(bytes, { stream: true })), () => this.ack(bytes.length));
+        if (this.hl.pending && !this.hlTimer) this.hlTimer = setTimeout(() => this.flushHighlight(), HOLD_MS);
+        return;
+      }
+      this.flushHighlight(); // rules just switched off: the held word must not get lost
+      this.term.write(bytes, () => this.ack(bytes.length));
     })];
+  }
+
+  /** Writes a word the highlighter held back because the output stopped mid-word. */
+  flushHighlight() {
+    clearTimeout(this.hlTimer);
+    this.hlTimer = null;
+    if (this.hl.pending) this.term.write(this.hl.flush());
   }
 
   // Flow control: tell the backend what has been rendered, batched to ~1 call per 20 ms.
@@ -250,6 +266,9 @@ export class Tab {
         ? [{ label: "Break senden", disabled: this.state !== "connected", action: () => api.SendBreak(this.id).catch((e) => toast(errMsg(e), "err")) }]
         : []),
       { label: "SFTP-Browser", hint: "Alt+B", action: () => this.toggleSftp(), disabled: this.protocol !== "ssh" },
+      ...(this.protocol === "ssh"
+        ? [{ label: "SSH-Verbindung (Verfahren, Schlüssel)…", disabled: this.state !== "connected", action: () => showSSHInfo(this.id, this.title) }]
+        : []),
       { label: "Running-Config sichern", disabled: this.state !== "connected" || this.pasting, action: () => this.saveRunningConfig() },
       { label: "Configs vergleichen…", action: () => openConfigDiff() },
       "-",
@@ -422,15 +441,26 @@ export class Tab {
     await this.toFile(() => api.RunSnippetToFile(this.id, sn.name, sn.text), "Ausgabe gespeichert");
   }
 
-  /** Runs save() and offers to open or show the written file. */
+  /**
+   * Runs save() (one path or several) and offers to open or show the files.
+   * With the setting "outputOpen" they open right away; many files open
+   * as the folder instead of a window each.
+   */
   async toFile(save, done) {
     try {
-      const path = await save();
+      const got = await save();
+      const paths = Array.isArray(got) ? got : [got];
+      const path = paths[paths.length - 1];
       const fail = (e) => toast(errMsg(e), "err");
-      toast(`${done}: ${path}`, "ok", 15000, [
-        { label: "Öffnen", action: () => api.OpenConfigFile(path).catch(fail) },
+      const openAll = () => (paths.length > MAX_OPEN_FILES
+        ? api.RevealLocal(path).catch(fail)
+        : paths.forEach((p) => api.OpenConfigFile(p).catch(fail)));
+      if (this.mgr.settings.outputOpen) openAll();
+      const what = paths.length > 1 ? `${paths.length} Dateien, zuletzt ${path}` : path;
+      toast(`${done}: ${what}`, "ok", 15000, [
+        { label: "Öffnen", action: openAll },
         { label: "Im Ordner zeigen", action: () => api.RevealLocal(path).catch(fail) },
-        { label: "Vergleichen", action: () => openConfigDiff(path) },
+        ...(paths.length === 1 ? [{ label: "Vergleichen", action: () => openConfigDiff(path) }] : []),
       ]);
     } catch (e) { toast(errMsg(e), "err", 9000); }
     this.focus();
@@ -555,6 +585,7 @@ export class Tab {
     api.CloseTab(this.id).catch(() => {});
     this.subs.forEach((off) => off && off());
     this.ro.disconnect();
+    clearTimeout(this.hlTimer); // a held word must not reach a disposed terminal
     this.term.dispose();
     this.view.remove();
     this.tabEl.remove();

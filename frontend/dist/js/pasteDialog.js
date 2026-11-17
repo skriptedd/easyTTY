@@ -63,7 +63,7 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
     modeBtn("paced", "Zeilenweise mit Echo", "Wartet nach jeder Zeile auf das Gerät – sicher für Switches und Router"),
     modeBtn("fast", "Am Stück", "Alles auf einmal – schnell, für Linux-Shells"),
     modeBtn("file", "Ausgabe in Datei", "Befehle einzeln ausführen, „--More--“ selbst umblättern und Befehle samt Ausgabe als Textdatei im Config-Ordner speichern"));
-  const sendBtn = h("button", { class: "btn primary", title: "Strg+Enter" }, "Einfügen");
+  const sendBtn = h("button", { class: "btn primary", title: "Enter (neue Zeile: Alt+Enter)" }, "Einfügen");
   const syncMode = () => {
     modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
     pauseField.hidden = mode !== "paced";
@@ -85,7 +85,7 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
       wide: true,
       sticky: true,
       body: h("div", { class: "paste-dialog" },
-        h("p", { class: "hint" }, "Text vor dem Senden prüfen und bei Bedarf direkt hier ändern."),
+        h("p", { class: "hint" }, "Text vor dem Senden prüfen und bei Bedarf direkt hier ändern. Enter sendet, Alt+Enter macht eine neue Zeile."),
         area,
         h("div", { class: "paste-row" },
           h("span", { class: "paste-label" }, "Weglassen"),
@@ -102,8 +102,19 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
         h("button", { class: "btn", onclick: () => close(null) }, "Abbrechen"),
         sendBtn,
       ],
-      // Enter belongs to the textarea; Ctrl+Enter sends.
-      onKey: (e) => { if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); send(); } },
+      // Enter sends (in the text and the pause field), Alt+Enter or Shift+Enter
+      // starts a new line, Ctrl+Enter sends from anywhere. Buttons keep their Enter.
+      onKey: (e) => {
+        if (e.key !== "Enter" || e.isComposing) return;
+        if (e.target === area && (e.altKey || e.shiftKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          area.setRangeText("\n", area.selectionStart, area.selectionEnd, "end");
+          area.dispatchEvent(new Event("input"));
+          return;
+        }
+        if (e.ctrlKey || e.target === area || e.target === pause) { e.preventDefault(); e.stopPropagation(); send(); }
+      },
     };
   }).then((v) => (v && v.text ? v : null));
 }

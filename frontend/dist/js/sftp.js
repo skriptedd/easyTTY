@@ -37,6 +37,8 @@ class FilePane {
     });
     this.list = h("div", { class: "sftp-list", tabindex: "0" });
     this.list.addEventListener("keydown", (e) => this.onKey(e));
+    // Released outside the pressed row: no narrowing on a later stray mouseup.
+    this.list.addEventListener("mouseup", () => { this.pendingNarrow = -1; }); // bubbles after the row handler
     this.list.addEventListener("contextmenu", (e) => {
       if (e.target.closest(".sftp-row[data-i]")) return;
       e.preventDefault();
@@ -104,10 +106,22 @@ class FilePane {
       h("span", { class: "n" }, e.name),
       h("span", { class: "s" }, e.isDir ? "" : fmtSize(e.size)),
       h("span", { class: "m" }, fmtDate(e.modTime)));
-      r.addEventListener("mousedown", (ev) => { if (ev.button === 0 || !this.selected.has(e.path)) this.clickRow(i, ev); });
+      // Pressing on an already selected row keeps the selection, so several
+      // files can be dragged at once; a plain click (no drag) narrows it on mouseup.
+      r.addEventListener("mousedown", (ev) => {
+        const keep = this.selected.has(e.path) && !ev.shiftKey && !ev.ctrlKey;
+        if (keep) { this.pendingNarrow = i; this.anchor = i; return; }
+        this.pendingNarrow = -1;
+        if (ev.button === 0 || !this.selected.has(e.path)) this.clickRow(i, ev);
+      });
+      r.addEventListener("mouseup", (ev) => {
+        if (ev.button === 0 && this.pendingNarrow === i) this.clickRow(i, ev);
+        this.pendingNarrow = -1;
+      });
       r.addEventListener("dblclick", () => this.open(e));
       r.addEventListener("contextmenu", (ev) => { ev.preventDefault(); this.o.onMenu(ev.clientX, ev.clientY, e); });
       r.addEventListener("dragstart", (ev) => {
+        this.pendingNarrow = -1;
         if (!this.selected.has(e.path)) { this.selected = new Set([e.path]); this.paintSelection(); }
         ev.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: this.o.kind, paths: this.selection().map((x) => x.path) }));
         ev.dataTransfer.effectAllowed = "copy";

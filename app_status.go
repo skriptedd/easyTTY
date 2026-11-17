@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+
 	"easytty/internal/conn"
 	"easytty/internal/status"
 )
@@ -28,4 +30,18 @@ func (a *App) ServerStatus(tabID string) (status.Snapshot, error) {
 	a.statusKind[tabID] = snap.Kind
 	a.mu.Unlock()
 	return snap, nil
+}
+
+// SSHInfo tells what an SSH tab negotiated (key exchange, ciphers, MACs) and
+// which keys were involved (host key, login key).
+func (a *App) SSHInfo(tabID string) (conn.SSHInfo, error) {
+	tc, err := a.terms.Conn(tabID)
+	if err != nil {
+		return conn.SSHInfo{}, err
+	}
+	sc, ok := tc.(*conn.SSHConn)
+	if !ok {
+		return conn.SSHInfo{}, errors.New("Verbindungsdetails gibt es nur bei SSH-Verbindungen")
+	}
+	return sc.Info(), nil
 }

@@ -10,6 +10,15 @@ const ESCAPE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-
 const SGR_SEQ = /^\x1b\[[0-9;:]*m$/;
 const MAX_CARRY = 256; // an unfinished escape longer than this is no escape
 
+// Output arrives in pieces. So that "gro" + "up" is not taken for the word
+// "up", matching sees the end of the text before (CONTEXT), and a word cut
+// off at the end of a piece waits for the next one (at most HOLD_MS, see
+// tab.js), so "up" + "date" is not coloured either.
+const CONTEXT = 64;
+const HOLD_MAX = 64;
+const TRAILING_WORD = /[\w.:-]+$/;
+export const HOLD_MS = 15;
+
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -45,15 +54,20 @@ export function ruleError(rule) {
   } catch (e) { return "Ungültiger regulärer Ausdruck: " + e.message; }
 }
 
-/** Matches of all rules in plain text: non-overlapping, earliest (then longest) first. */
-function spans(text, matchers) {
+/**
+ * Matches of all rules in plain text: non-overlapping, earliest (then longest)
+ * first. before is text already shown: it only decides word boundaries.
+ */
+function spans(text, matchers, before = "") {
+  const all = before + text;
   const found = [];
   for (const m of matchers) {
     m.re.lastIndex = 0;
     let hit;
-    while ((hit = m.re.exec(text)) !== null) {
+    while ((hit = m.re.exec(all)) !== null) {
       if (hit[0] === "") { m.re.lastIndex++; continue; }
-      found.push({ start: hit.index, end: hit.index + hit[0].length, sgr: m.sgr });
+      if (hit.index < before.length) continue; // starts in text that is already out
+      found.push({ start: hit.index - before.length, end: hit.index - before.length + hit[0].length, sgr: m.sgr });
     }
   }
   found.sort((a, b) => a.start - b.start || b.end - a.end);
@@ -70,6 +84,8 @@ export class Highlighter {
   constructor(rules) {
     this.setRules(rules);
     this.carry = ""; // an escape sequence cut off at the end of the last chunk
+    this.held = ""; // a word cut off at the end of the last chunk
+    this.before = ""; // the end of the plain text shown so far
     this.style = ""; // the device's colour since its last reset, restored after a match
   }
 
@@ -79,10 +95,21 @@ export class Highlighter {
 
   get active() { return this.matchers.length > 0; }
 
+  /** True while a cut-off word waits; call flush() if nothing follows soon. */
+  get pending() { return this.held !== ""; }
+
+  /** Returns the waiting word, coloured as far as it can be told. */
+  flush() {
+    const text = this.held;
+    this.held = "";
+    return this.plain(text);
+  }
+
   /** Returns text with colour codes around matches. */
   push(chunk) {
-    let text = this.carry + chunk;
+    let text = this.carry + this.held + chunk;
     this.carry = "";
+    this.held = "";
     const cut = text.lastIndexOf("\x1b");
     if (cut >= 0 && text.length - cut < MAX_CARRY) {
       const tail = text.slice(cut);
@@ -104,12 +131,21 @@ export class Highlighter {
       out += seq;
       pos = esc.index + seq.length;
     }
-    return out + this.plain(text.slice(pos));
+    let rest = text.slice(pos);
+    // Hold back a word cut off at the end, unless it is all there is (typed
+    // characters echo one by one and must show at once).
+    const word = this.carry ? null : TRAILING_WORD.exec(rest);
+    if (word && word[0].length <= HOLD_MAX && word.index + pos > 0) {
+      this.held = word[0];
+      rest = rest.slice(0, word.index);
+    }
+    return out + this.plain(rest);
   }
 
   plain(text) {
     if (!text) return "";
-    const hits = spans(text, this.matchers);
+    const hits = spans(text, this.matchers, this.before);
+    this.before = (this.before + text).slice(-CONTEXT);
     if (!hits.length) return text;
     let out = "";
     let pos = 0;

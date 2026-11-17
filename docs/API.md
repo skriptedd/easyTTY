@@ -115,6 +115,7 @@ MCP-Werkzeug hier steht.
 | Methode | Argumente | Ergebnis | Hinweis |
 |---|---|---|---|
 | `ServerStatus` | `tabID: string` | `status.Snapshot, error` | Nur SSH-Tabs |
+| `SSHInfo` | `tabID: string` | `conn.SSHInfo, error` | Nur SSH-Tabs: Adresse, Benutzer, Sprung-Hosts, Versionen, Schlüsseltausch, Hostkey-Verfahren, Verschlüsselung und MAC je Richtung (`legacy` = nur für alte Geräte zugelassen), Hostkey (Typ, Bits, SHA256-Fingerabdruck), Anmeldeart, gewählte Schlüsseldatei |
 
 ### Aufgaben
 
@@ -147,7 +148,7 @@ MCP-Werkzeug hier steht.
 | `ConfigDir` | – | `string, error` | Config-Ordner (Einstellung `configDir`, sonst `Dokumente\easyTTY\Configs`), wird angelegt |
 | `PickConfigDir` | – | `string, error` | Ordnerdialog, speichert die Wahl in den Einstellungen |
 | `OpenConfigDir` | – | `error` | Explorer |
-| `RunSnippetToFile` | `tabID, name, text: string` | `string, error` | Führt die Befehle im offenen Tab nacheinander aus und speichert Befehl und Ausgabe als `<Tab>_<Name>_<Datum>_<Zeit>.txt` im Config-Ordner. Ergebnis: Pfad |
+| `RunSnippetToFile` | `tabID, name, text: string` | `string[], error` | Führt die Befehle im offenen Tab nacheinander aus und speichert Befehl und Ausgabe als `<Tab>_<Name>_<Datum>_<Zeit>.txt` im Config-Ordner. Mit `outputSplit` eine Datei pro Befehl (`<Tab>_<Befehl>_…`). Ergebnis: Pfade |
 | `ConfigFiles` | – | `ConfigFile[], error` | Dateien im Config-Ordner, neueste zuerst, höchstens 500: `{name, path, size, modTime, device}` |
 | `DiffConfigs` | `oldPath, newPath: string, ignoreVolatile: bool` | `{lines[{kind (" "/"-"/"+"), text, oldNo?, newNo?}], removed, added}, error` | Zeilenvergleich zweier Dateien im Config-Ordner (je höchstens 5 MB). `ignoreVolatile` lässt Zeitstempel-Zeilen weg |
 | `DefaultHighlights` | – | `store.Highlight[]` | Standard-Hervorhebungen (IP, MAC, Fehler, OK) |
@@ -219,6 +220,7 @@ MCP-Werkzeug hier steht.
 | `typeSpeed` | `""` | `fast`, `slow` |
 | `updateCheck` | `true` | Beim Start nach einer neuen Version suchen |
 | `highlights` | IP, MAC, Fehler, OK | `[{name, kind (words/regex), pattern, color (red/green/yellow/blue/magenta/cyan), off}]`, höchstens 50; färbt nur die Anzeige |
+| `outputSplit`, `outputOpen` | `false` | Ausgabe in Datei: eine Datei pro Befehl, Dateien gleich öffnen |
 | `snippets` | `null` | `[{name, text, saveOutput?}]`, höchstens 200, Befehls-Schnipsel (Alt+J) |
 
 ## Ereignisse (Backend an Oberfläche)

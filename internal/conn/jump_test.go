@@ -53,6 +53,9 @@ func TestDialThroughJumpHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	readUntil(t, c, "hallo")
+	if info := c.Info(); len(info.Jump) != 1 || info.Jump[0] != jump.Addr || info.Addr != target.Addr {
+		t.Errorf("jump chain %v to %s", info.Jump, info.Addr)
+	}
 }
 
 func TestJumpHostPromptIsMarked(t *testing.T) {

@@ -193,25 +193,26 @@ func insideDir(dir, path string) bool {
 
 // RunSnippetToFile runs the commands of a snippet in an open tab (the user
 // watches them) and writes every command with its output to a text file in
-// the config folder. Returns the file path.
-func (a *App) RunSnippetToFile(tabID, name, text string) (string, error) {
+// the config folder: one file for all, or with the setting "outputSplit"
+// one file per command. Returns the file paths.
+func (a *App) RunSnippetToFile(tabID, name, text string) ([]string, error) {
 	cmds := automation.SplitCommands(text)
 	if len(cmds) == 0 {
-		return "", errors.New("Der Schnipsel enthält keinen Befehl")
+		return nil, errors.New("Der Schnipsel enthält keinen Befehl")
 	}
 	if err := automation.CheckCommands(cmds); err != nil {
-		return "", err
+		return nil, err
 	}
 	dir, err := a.ConfigDir()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	a.mu.Lock()
 	meta := a.tabMeta[tabID]
 	a.mu.Unlock()
 	stream, err := a.terms.Tap(tabID)
 	if err != nil {
-		return "", fmt.Errorf("Tab nicht bereit: %w", err)
+		return nil, fmt.Errorf("Tab nicht bereit: %w", err)
 	}
 	defer stream.Close()
 	ctx, cancel := context.WithTimeout(a.ctx, configTimeout)
@@ -219,13 +220,39 @@ func (a *App) RunSnippetToFile(tabID, name, text string) (string, error) {
 	at := time.Now()
 	res := automation.RunCommands(ctx, stream, cmds, automation.Options{IdleTimeout: configIdleTimeout}, nil)
 	if len(res.Steps) == 0 && res.Error != "" {
-		return "", errors.New("Schnipsel nicht ausgeführt: " + res.Error)
+		return nil, errors.New("Schnipsel nicht ausgeführt: " + res.Error)
 	}
-	path := uniqueFile(dir, outputFileName(meta.title, name, at, ".txt"))
-	if err := os.WriteFile(path, []byte(snippetReport(meta.title, name, at, res)), 0o600); err != nil {
-		return "", err
+	return writeOutputs(dir, meta.title, name, at, res, a.GetSettings().OutputSplit)
+}
+
+// writeOutputs writes the report as one file, or split into one file per
+// command (named after the command). A run that broke off notes that in the
+// last file.
+func writeOutputs(dir, title, name string, at time.Time, res automation.Result, split bool) ([]string, error) {
+	type part struct {
+		label string
+		res   automation.Result
 	}
-	return path, nil
+	parts := []part{{name, res}}
+	if split && len(res.Steps) > 1 {
+		parts = parts[:0]
+		for i, st := range res.Steps {
+			one := automation.Result{Prompt: res.Prompt, Steps: []automation.Step{st}}
+			if i == len(res.Steps)-1 {
+				one.Error = res.Error
+			}
+			parts = append(parts, part{st.Command, one})
+		}
+	}
+	var paths []string
+	for _, p := range parts {
+		path := uniqueFile(dir, outputFileName(title, p.label, at, ".txt"))
+		if err := os.WriteFile(path, []byte(snippetReport(title, p.label, at, p.res)), 0o600); err != nil {
+			return paths, err
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
 }
 
 // snippetReport is the text file: a header, then each command with its output.

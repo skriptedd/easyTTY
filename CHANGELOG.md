@@ -1,5 +1,25 @@
 # Änderungen
 
+## 0.3.2 (2026-11-17)
+
+### Neu
+
+- Rechtsklick auf einen SSH-Tab → „SSH-Verbindung“: ausgehandelte Verfahren (Schlüsseltausch,
+  Verschlüsselung und MAC je Richtung, Hostkey-Verfahren), Hostkey mit Typ, Länge und
+  Fingerabdruck, Anmeldeart, benutzte Schlüsseldatei und Sprung-Hosts. Veraltete
+  Verfahren sind markiert.
+- Ausgabe in Datei: auf Wunsch eine Datei pro Befehl und die Dateien gleich öffnen
+  (Einstellungen → Configs und Ausgaben).
+- Einfügen-Fenster: Enter sendet, Alt+Enter (oder Shift+Enter) macht eine neue Zeile.
+
+### Behoben
+
+- SFTP: Mehrere markierte Dateien lassen sich wieder zusammen ziehen. Bisher hat der
+  Klick zum Ziehen die Auswahl auf eine Datei zurückgesetzt. Aus dem Explorer auf einen
+  Server-Ordner gezogene Dateien landen in diesem Ordner.
+- Hervorhebungen: Ein Wort wie „up“ wurde manchmal mitten in „group“ oder „update“
+  gefärbt, wenn die Ausgabe genau dort in zwei Stücken ankam.
+
 ## 0.3.1 (2026-11-13)
 
 ### Behoben

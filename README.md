@@ -89,6 +89,8 @@ Aus SecureCRT kommst du genauso, siehe Einstellungen → „Aus anderen Programm
 - **SFTP-Browser** pro Tab: Server und PC nebeneinander, Ordner, Drag & Drop aus dem Explorer, Fortschritt mit Abbruch. Downloads überschreiben nie. Bei vorhandenen Namen fragt der Upload: überschreiben, umbenennen oder überspringen. Ersetzt wird erst nach vollständiger Übertragung.
 - **Firmware-Server**: gibt einen Ordner nur lesend per TFTP, HTTP und SCP/SFTP frei und zeigt fertige Befehle wie `copy tftp://…`. Auf Wunsch nimmt er Running-Configs per TFTP an.
 - **Running-Config sichern**: Rechtsklick auf den Tab, auch über eine reine Konsole. Landet im wählbaren Config-Ordner.
+- **Ausgabe in Datei**: Befehle aus dem Einfügen-Fenster oder einem Schnipsel laufen nacheinander, die Ausgabe landet im Config-Ordner. Auf Wunsch eine Datei pro Befehl und gleich geöffnet.
+- **SSH-Verbindung**: Rechtsklick auf einen SSH-Tab zeigt Schlüsseltausch, Verschlüsselung, MAC, Hostkey mit Fingerabdruck und Anmeldeart. Verfahren, die nur für alte Geräte zugelassen sind, sind markiert.
 - **Server-Status**: Last, RAM, Platten und Prozesse für Linux und Cisco IOS.
 - **Session-Logs**: Klartext mit Zeitstempel pro Zeile unter `Dokumente\easyTTY\Logs`.
 
@@ -128,6 +130,7 @@ Alle Kürzel zeigt **Alt+K**. Die Alt-Kürzel lassen sich in den Einstellungen a
 | Baum: Shift+Enter | Session ins offene Layout, ohne offenes Layout neben den aktiven Tab |
 | Baum: Strg+Enter | Als neuen Block starten, markierte Sessions zusammen |
 | SFTP: Enter, Backspace, F2, Entf, F5, Strg+A | Öffnen, hoch, umbenennen, löschen, aktualisieren, alles markieren |
+| Einfügen-Fenster: Enter, Alt+Enter | Senden, neue Zeile |
 
 In RDP-Tabs bleiben Alt+W, E, F, S, K, T, die Ziffern und die Pfeile bei easyTTY, alle anderen Tasten gehen an den Remote-PC.
 

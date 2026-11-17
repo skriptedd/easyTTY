@@ -26,8 +26,12 @@ type Settings struct {
 	LogDir     string `json:"logDir"` // "" = app default (Dokumente\easyTTY\Logs)
 	LogRaw     bool   `json:"logRaw"` // true = raw bytes incl. colour codes, no timestamps
 	// ConfigDir keeps saved running-configs ("" = Dokumente\easyTTY\Configs).
-	ConfigDir    string `json:"configDir"`
-	FirstRunDone bool   `json:"firstRunDone"`
+	ConfigDir string `json:"configDir"`
+	// Output to file (paste mode "Ausgabe in Datei", snippets): one file per
+	// command instead of one for all, and open the files once written.
+	OutputSplit  bool `json:"outputSplit,omitempty"`
+	OutputOpen   bool `json:"outputOpen,omitempty"`
+	FirstRunDone bool `json:"firstRunDone"`
 
 	// Pasting multi-line text (e.g. a running-config).
 	PasteConfirm   bool `json:"pasteConfirm"`   // ask before pasting more than one line

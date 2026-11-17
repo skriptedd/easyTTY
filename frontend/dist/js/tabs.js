@@ -520,7 +520,11 @@ export class TabManager {
     const view = el?.closest(".tabview");
     const tab = this.tabs.find((t) => t.view === view);
     if (!paths?.length) { toast("Drag & Drop hat keine Dateipfade geliefert – nimm „⬆ Hochladen“ oder den lokalen Dateibrowser.", "err"); return; }
-    if (tab?.sftp && el.closest(".sftp")) tab.sftp.upload(paths);
+    if (!tab?.sftp || !el.closest(".sftp")) return;
+    // Dropped onto a server folder row: upload into that folder.
+    const row = el.closest(".pane-remote .sftp-row[data-i]");
+    const entry = row && tab.sftp.entries[+row.dataset.i];
+    tab.sftp.upload(paths, entry?.isDir ? entry.path : undefined);
   }
 
   bindReorder() {

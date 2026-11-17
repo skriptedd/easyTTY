@@ -94,3 +94,43 @@ func TestOutputFileNameWithLabel(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestWriteOutputsSplitsPerCommand(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Date(2026, 11, 17, 10, 0, 0, 0, time.Local)
+	res := automation.Result{Prompt: "sw1#", Error: "Zeitüberschreitung", Steps: []automation.Step{
+		{Command: "show clock", Output: "10:00"},
+		{Command: "show ip int br", Output: "Vlan1 up"},
+	}}
+
+	one, err := writeOutputs(dir, "sw1", "Ausgabe", at, res, false)
+	if err != nil || len(one) != 1 {
+		t.Fatalf("single file: %v %v", one, err)
+	}
+	split, err := writeOutputs(dir, "sw1", "Ausgabe", at, res, true)
+	if err != nil || len(split) != 2 {
+		t.Fatalf("split: %v %v", split, err)
+	}
+
+	if got := filepath.Base(split[1]); got != "sw1_show_ip_int_br_2026-11-17_100000.txt" {
+		t.Errorf("name %s", got)
+	}
+	first, _ := os.ReadFile(split[0])
+	last, _ := os.ReadFile(split[1])
+	if !strings.Contains(string(first), "10:00") || strings.Contains(string(first), "Vlan1") || strings.Contains(string(first), "Abgebrochen") {
+		t.Errorf("first file:\n%s", first)
+	}
+	if !strings.Contains(string(last), "Vlan1 up") || !strings.Contains(string(last), "Abgebrochen: Zeitüberschreitung") {
+		t.Errorf("last file:\n%s", last)
+	}
+}
+
+func TestWriteOutputsKeepsOneFileForOneCommand(t *testing.T) {
+	res := automation.Result{Steps: []automation.Step{{Command: "show version"}}}
+
+	paths, err := writeOutputs(t.TempDir(), "sw1", "Version", time.Now(), res, true)
+
+	if err != nil || len(paths) != 1 || !strings.Contains(filepath.Base(paths[0]), "_Version_") {
+		t.Errorf("%v %v", paths, err)
+	}
+}

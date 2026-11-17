@@ -88,7 +88,12 @@ type SSHConn struct {
 	mu      sync.Mutex
 	closers []io.Closer // port forwards, ended with the connection
 	closed  bool
+
+	info SSHInfo // fixed after Dial
 }
+
+// Info tells what the connection negotiated and which keys it used.
+func (c *SSHConn) Info() SSHInfo { return c.info }
 
 // addCloser registers something to stop on Close; false if already closed.
 func (c *SSHConn) addCloser(cl io.Closer) bool {
@@ -105,7 +110,7 @@ var errCancelled = errors.New("abgebrochen")
 
 // Dial connects, authenticates and starts a shell with a PTY.
 func (d Dialer) Dial(ctx context.Context, cfg SSHConfig) (*SSHConn, error) {
-	client, err := d.DialClient(ctx, cfg)
+	client, info, err := d.dial(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +119,7 @@ func (d Dialer) Dial(ctx context.Context, cfg SSHConfig) (*SSHConn, error) {
 		client.Close()
 		return nil, err
 	}
+	c.info = info
 	if cfg.KeepAlive > 0 {
 		go c.keepAlive(cfg.KeepAlive)
 	}
@@ -122,6 +128,12 @@ func (d Dialer) Dial(ctx context.Context, cfg SSHConfig) (*SSHConn, error) {
 
 // DialClient connects and authenticates without starting a shell.
 func (d Dialer) DialClient(ctx context.Context, cfg SSHConfig) (*ssh.Client, error) {
+	client, _, err := d.dial(ctx, cfg)
+	return client, err
+}
+
+// dial is DialClient that also reports what was negotiated.
+func (d Dialer) dial(ctx context.Context, cfg SSHConfig) (_ *ssh.Client, info SSHInfo, err error) {
 	if cfg.Port == 0 {
 		cfg.Port = 22
 	}
@@ -129,22 +141,24 @@ func (d Dialer) DialClient(ctx context.Context, cfg SSHConfig) (*ssh.Client, err
 		ans, ok := d.ask(PromptRequest{Kind: "username", Title: "Benutzername", Message: "Anmelden an " + cfg.Host,
 			Fields: []PromptField{{Label: "Benutzer"}}})
 		if !ok || strings.TrimSpace(ans[0]) == "" {
-			return nil, errCancelled
+			return nil, info, errCancelled
 		}
 		cfg.User = strings.TrimSpace(ans[0])
 	}
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	if d.HostKeys == nil {
-		return nil, errors.New("keine Hostkey-Prüfung konfiguriert")
+		return nil, info, errors.New("keine Hostkey-Prüfung konfiguriert")
 	}
 	if cfg.Auth == "key" || cfg.Auth == "agent" {
 		cfg.Password = "" // never offer a stored password when key auth was chosen
 	}
+	info.Addr, info.User = addr, cfg.User
 
-	raw, via, err := d.open(ctx, cfg, addr)
+	raw, via, jump, err := d.open(ctx, cfg, addr)
 	if err != nil {
-		return nil, err
+		return nil, info, err
 	}
+	info.Jump = jump
 	if via != nil {
 		defer func() {
 			if err != nil {
@@ -183,11 +197,14 @@ func (d Dialer) DialClient(ctx context.Context, cfg SSHConfig) (*ssh.Client, err
 		defer arm()
 		return d.ask(r)
 	}
+	var hostKey ssh.PublicKey
 	hostKeys := func(host string, remote net.Addr, key ssh.PublicKey) error {
 		pause()
 		defer arm()
+		hostKey = key
 		return d.HostKeys(host, remote, key)
 	}
+	trace := &authTrace{}
 
 	var agentConn net.Conn
 	if d.AgentDial != nil && (cfg.Auth == "auto" || cfg.Auth == "agent" || cfg.Auth == "") {
@@ -200,7 +217,7 @@ func (d Dialer) DialClient(ctx context.Context, cfg SSHConfig) (*ssh.Client, err
 	config := &ssh.ClientConfig{
 		Config:            legacyFriendly(),
 		User:              cfg.User,
-		Auth:              paused.authMethods(cfg, agentConn, &keyErr),
+		Auth:              paused.authMethods(cfg, agentConn, &keyErr, trace),
 		HostKeyCallback:   hostKeys,
 		HostKeyAlgorithms: withLegacy(ssh.SupportedAlgorithms().HostKeys, ssh.InsecureAlgorithms().HostKeys),
 	}
@@ -219,22 +236,22 @@ func (d Dialer) DialClient(ctx context.Context, cfg SSHConfig) (*ssh.Client, err
 	if err = hsErr; err != nil {
 		raw.Close()
 		if ctx.Err() != nil {
-			return nil, errCancelled
+			return nil, info, errCancelled
 		}
 		if timedOut.Load() {
-			return nil, fmt.Errorf("SSH-Anmeldung an %s: Server antwortet nicht", addr)
+			return nil, info, fmt.Errorf("SSH-Anmeldung an %s: Server antwortet nicht", addr)
 		}
 		if ke := keyErr.Load(); ke != nil {
-			return nil, fmt.Errorf("SSH-Anmeldung an %s: %w", addr, *ke)
+			return nil, info, fmt.Errorf("SSH-Anmeldung an %s: %w", addr, *ke)
 		}
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
-			return nil, fmt.Errorf("SSH-Anmeldung an %s: Server antwortet nicht", addr)
+			return nil, info, fmt.Errorf("SSH-Anmeldung an %s: Server antwortet nicht", addr)
 		}
 		if strings.Contains(err.Error(), "no common algorithm for host key") {
-			return nil, fmt.Errorf("SSH-Anmeldung an %s: Der Server bietet keinen Hostkey vom gespeicherten Typ mehr an. Wurde er neu aufgesetzt, den alten Eintrag aus known_hosts entfernen. (%w)", addr, err)
+			return nil, info, fmt.Errorf("SSH-Anmeldung an %s: Der Server bietet keinen Hostkey vom gespeicherten Typ mehr an. Wurde er neu aufgesetzt, den alten Eintrag aus known_hosts entfernen. (%w)", addr, err)
 		}
-		return nil, fmt.Errorf("SSH-Anmeldung an %s: %w", addr, err)
+		return nil, info, fmt.Errorf("SSH-Anmeldung an %s: %w", addr, err)
 	}
 	_ = raw.SetDeadline(time.Time{})
 	client := ssh.NewClient(sc, chans, reqs)
@@ -245,19 +262,23 @@ func (d Dialer) DialClient(ctx context.Context, cfg SSHConfig) (*ssh.Client, err
 			via.Close()
 		}()
 	}
-	return client, nil
+	fillAlgorithms(&info, sc)
+	info.HostKey = keyInfo(hostKey)
+	trace.fill(&info)
+	return client, info, nil
 }
 
 // open returns the transport to addr: a TCP connection, or a channel through
-// the jump host (via, to be closed with the connection that uses it).
-func (d Dialer) open(ctx context.Context, cfg SSHConfig, addr string) (net.Conn, *ssh.Client, error) {
+// the jump host (via, to be closed with the connection that uses it) and the
+// chain of jump hosts, first hop first.
+func (d Dialer) open(ctx context.Context, cfg SSHConfig, addr string) (net.Conn, *ssh.Client, []string, error) {
 	if cfg.Jump == nil {
 		nd := net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}
 		raw, err := nd.DialContext(ctx, "tcp", addr)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Verbindung zu %s fehlgeschlagen: %w", addr, err)
+			return nil, nil, nil, fmt.Errorf("Verbindung zu %s fehlgeschlagen: %w", addr, err)
 		}
-		return raw, nil, nil
+		return raw, nil, nil, nil
 	}
 	hop := d
 	hop.Ask = func(r PromptRequest) ([]string, bool) {
@@ -265,18 +286,18 @@ func (d Dialer) open(ctx context.Context, cfg SSHConfig, addr string) (net.Conn,
 		r.Title = "Sprung-Host " + cfg.Jump.Host + ": " + r.Title
 		return d.ask(r)
 	}
-	via, err := hop.DialClient(ctx, *cfg.Jump)
+	via, hopInfo, err := hop.dial(ctx, *cfg.Jump)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Sprung-Host %s: %w", cfg.Jump.Host, err)
+		return nil, nil, nil, fmt.Errorf("Sprung-Host %s: %w", cfg.Jump.Host, err)
 	}
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	raw, err := via.DialContext(dctx, "tcp", addr)
 	if err != nil {
 		via.Close()
-		return nil, nil, fmt.Errorf("Verbindung von %s zu %s fehlgeschlagen: %w", cfg.Jump.Host, addr, err)
+		return nil, nil, nil, fmt.Errorf("Verbindung von %s zu %s fehlgeschlagen: %w", cfg.Jump.Host, addr, err)
 	}
-	return raw, via, nil
+	return raw, via, append(hopInfo.Jump, hopInfo.Addr), nil
 }
 
 func (d Dialer) ask(req PromptRequest) ([]string, bool) {
@@ -290,7 +311,7 @@ func (d Dialer) ask(req PromptRequest) ([]string, bool) {
 	return ans, ok
 }
 
-func (d Dialer) authMethods(cfg SSHConfig, agentConn net.Conn, keyErr *atomic.Pointer[error]) []ssh.AuthMethod {
+func (d Dialer) authMethods(cfg SSHConfig, agentConn net.Conn, keyErr *atomic.Pointer[error], trace *authTrace) []ssh.AuthMethod {
 	var methods []ssh.AuthMethod
 	var signers []func() ([]ssh.Signer, error)
 
@@ -300,7 +321,13 @@ func (d Dialer) authMethods(cfg SSHConfig, agentConn net.Conn, keyErr *atomic.Po
 	switch cfg.Auth {
 	case "key":
 		path := expandHome(cfg.KeyPath, d.HomeDir)
-		signers = append(signers, func() ([]ssh.Signer, error) { return d.loadKey(path, true) })
+		signers = append(signers, func() ([]ssh.Signer, error) {
+			s, err := d.loadKey(path, true)
+			if err == nil && len(s) > 0 {
+				trace.keyFile(path, s[0].PublicKey())
+			}
+			return s, err
+		})
 	case "auto", "":
 		if d.HomeDir == "" {
 			break // no home: never fall back to .ssh below the working directory
@@ -312,6 +339,7 @@ func (d Dialer) authMethods(cfg SSHConfig, agentConn net.Conn, keyErr *atomic.Po
 	}
 	if cfg.Auth != "password" && len(signers) > 0 {
 		methods = append(methods, ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
+			trace.tried("publickey")
 			var all []ssh.Signer
 			for _, get := range signers {
 				s, err := get()
@@ -340,6 +368,7 @@ func (d Dialer) authMethods(cfg SSHConfig, agentConn net.Conn, keyErr *atomic.Po
 
 	methods = append(methods, ssh.RetryableAuthMethod(ssh.KeyboardInteractive(
 		func(name, instruction string, questions []string, echos []bool) ([]string, error) {
+			trace.tried("keyboard-interactive")
 			if ke := keyErr.Load(); ke != nil {
 				return nil, *ke
 			}
@@ -364,6 +393,7 @@ func (d Dialer) authMethods(cfg SSHConfig, agentConn net.Conn, keyErr *atomic.Po
 		}), passwordAttempts))
 
 	methods = append(methods, ssh.RetryableAuthMethod(ssh.PasswordCallback(func() (string, error) {
+		trace.tried("password")
 		if ke := keyErr.Load(); ke != nil {
 			return "", *ke
 		}
