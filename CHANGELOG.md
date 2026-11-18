@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.3.4 (2026-11-18)
+
+### Neu
+
+- Neuer Ordner fragt gleich, welche Sessions hinein sollen, wahlweise kopiert oder verschoben.
+- Rechtsklick auf einen Ordner → „Sessions hinzufügen…“. Rechtsklick auf eine oder mehrere
+  markierte Sessions → „In Ordner kopieren / verschieben…“ und „Neuer Ordner mit diesen Sessions…“.
+- Ziehen nimmt alle markierten Sessions mit, mit gedrückter Strg-Taste werden sie kopiert.
+  Kopien behalten ihr gespeichertes Passwort.
+
 ## 0.3.3 (2026-11-18)
 
 ### Neu

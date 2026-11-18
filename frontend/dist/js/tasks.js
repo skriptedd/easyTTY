@@ -2,6 +2,7 @@
 // schedule (once, daily, weekly, interval). Every run keeps its output.
 import { api, clipboard, errMsg, events } from "./api.js";
 import { confirmDialog, fmtDate, h, modal, toast } from "./ui.js";
+import { sessionPicker } from "./sessionPicker.js";
 
 const KINDS = [["manual", "Von Hand"], ["once", "Einmal"], ["daily", "Täglich"], ["weekly", "Wöchentlich"], ["interval", "Intervall"]];
 const DEVICES = [["auto", "Automatisch erkennen"], ["cisco", "Switch / Router (terminal length 0)"], ["other", "Linux / anderes (nichts extra)"]];
@@ -38,72 +39,6 @@ function relTime(ms) {
   return d >= 0 ? `in ${txt}` : `vor ${txt}`;
 }
 
-/** Session picker grouped by folder, with a search box; ticks survive filtering. */
-function sessionPicker(tree, selected) {
-  // Only sessions the list shows (deleted or RDP ones would stay ticked invisibly).
-  const listed = new Set(tree.sessions.filter((x) => x.protocol !== "rdp").map((x) => x.id));
-  const chosen = new Set(selected.filter((id) => listed.has(id)));
-  const folders = new Map(tree.folders.map((f) => [f.id, f]));
-  const path = (id) => { const out = []; for (let f = folders.get(id), g = 0; f && g < 32; f = folders.get(f.parentId), g++) out.unshift(f.name); return out.join(" › ") || "Oberste Ebene"; };
-  const groups = new Map();
-  for (const s of tree.sessions.filter((x) => x.protocol !== "rdp").sort((a, b) => a.name.localeCompare(b.name))) {
-    const key = path(s.folderId);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(s);
-  }
-  const counter = h("span", { class: "muted task-count" });
-  const count = () => { counter.textContent = chosen.size ? `${chosen.size} ausgewählt` : "keine ausgewählt"; };
-  const rows = []; // {el, text, group}
-  const groupEls = [...groups.entries()].sort().map(([folder, list]) => {
-    const head = h("div", { class: "task-folder" }, folder);
-    const items = list.map((s) => {
-      const cb = h("input", { type: "checkbox", checked: chosen.has(s.id) });
-      cb.addEventListener("change", () => { if (cb.checked) chosen.add(s.id); else chosen.delete(s.id); count(); });
-      const how = s.protocol === "serial" ? s.serialPort : `${s.user ? s.user + "@" : ""}${s.host}`;
-      const warn = s.protocol === "ssh" && (!s.user || (s.auth === "password" && !s.hasPassword)) ? " ⚠ ohne gespeicherte Anmeldung" : "";
-      const el = h("label", { class: "check" }, cb, h("span", {}, s.name), h("span", { class: "muted" }, " " + how + warn));
-      rows.push({ el, cb, text: [s.name, s.host, s.user, s.serialPort, folder].join(" ").toLowerCase() });
-      return el;
-    });
-    const group = h("div", {}, head, items);
-    group.rows = rows.slice(-items.length);
-    return group;
-  });
-  const list = h("div", { class: "task-sessions" }, groupEls);
-  const empty = h("div", { class: "muted task-empty" }, "Keine Session passt zur Suche.");
-  list.append(empty);
-  const search = h("input", { class: "task-search", type: "search", placeholder: "Sessions suchen (Name, Host, Benutzer, Ordner) …", spellcheck: "false" });
-  const filter = () => {
-    const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
-    let shown = 0;
-    for (const g of groupEls) {
-      let any = false;
-      for (const r of g.rows) {
-        const hit = words.every((w) => r.text.includes(w));
-        r.el.hidden = !hit;
-        any ||= hit;
-        if (hit) shown++;
-      }
-      g.hidden = !any;
-    }
-    empty.hidden = shown > 0;
-  };
-  search.addEventListener("input", filter);
-  // Enter in the search ticks the only hit (quick: type, Enter).
-  search.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    e.stopPropagation();
-    const hits = rows.filter((r) => !r.el.hidden);
-    if (hits.length === 1) { hits[0].cb.checked = !hits[0].cb.checked; hits[0].cb.dispatchEvent(new Event("change")); }
-  });
-  filter();
-  count();
-  const el = h("div", { class: "task-picker" }, h("div", { class: "row" }, search, counter), list);
-  // A preselected session is scrolled into view.
-  setTimeout(() => rows.find((r) => r.cb.checked)?.el.scrollIntoView({ block: "nearest" }), 0);
-  return { el, value: () => [...chosen] };
-}
 
 /** Opens the task editor. Resolves with the saved task (and run=true for "Speichern & ausführen") or null. */
 export async function editTask(initial = {}) {
@@ -114,7 +49,7 @@ export async function editTask(initial = {}) {
   const t = { name: "", sessionIds: preset, commands: "", enabled: true, device: "auto", stopOnError: true, autoConfirm: true, idleTimeout: 0, schedule: { kind: "manual" }, ...initial };
   const sc = { kind: "manual", ...t.schedule };
   const name = h("input", { value: t.name, placeholder: "z. B. Config-Backup Rechenzentrum", autofocus: true });
-  const picker = sessionPicker(tree, t.sessionIds);
+  const picker = sessionPicker(tree, t.sessionIds, { loginWarn: true });
   const commands = h("textarea", { class: "task-cmds", spellcheck: "false", placeholder: "show running-config\n! Kommentar – Leerzeilen und ! / # werden übersprungen\nconf t\n interface Gi1/0/1\n  description Uplink\nend\nwrite memory" }, t.commands);
   // Schedule kinds as visible buttons (a dropdown hid that times can be set at all).
   const kind = { value: sc.kind };

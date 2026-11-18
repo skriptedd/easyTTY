@@ -78,6 +78,16 @@ func (a *App) ApplyNamingToAll() (int, error) {
 // MoveSession moves a session to a folder ("" = root).
 func (a *App) MoveSession(id, folderID string) error { return a.store.MoveSession(id, folderID) }
 
+// MoveSessions puts several sessions into a folder ("" = root) at once.
+func (a *App) MoveSessions(ids []string, folderID string) error {
+	return a.store.MoveSessions(ids, folderID)
+}
+
+// CopySessions copies sessions (with stored passwords) into a folder.
+func (a *App) CopySessions(ids []string, folderID string) ([]store.Session, error) {
+	return a.store.CopySessions(ids, folderID)
+}
+
 // SaveFolder creates or renames a folder.
 func (a *App) SaveFolder(f store.Folder) (store.Folder, error) { return a.store.SaveFolder(f) }
 

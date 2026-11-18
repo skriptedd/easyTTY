@@ -12,6 +12,7 @@ import { showShortcuts } from "./shortcuts.js";
 import { DRAG_TYPE, SessionTree } from "./tree.js";
 import { checkNow, initUpdates, showVersion } from "./update.js";
 import { manageSnippets, snippetMenu } from "./snippets.js";
+import { askAddSessions, askNewFolder, askTargetFolder, putSessions } from "./folderSessions.js";
 import { TAB_DRAG, TabManager } from "./tabs.js";
 import { confirmDialog, contextMenu, h, icon, inputDialog, makeSplitter, modal, setDragActive, store, toast } from "./ui.js";
 import { GLOBAL_IN_FIELDS, keyAction } from "./keys.js";
@@ -97,15 +98,35 @@ async function editExisting(s) {
   if (res.connect) connect(res.session);
 }
 
-async function newFolder(parentId = "") {
-  const name = await inputDialog({ title: "Neuer Ordner", label: "Name", ok: "Anlegen" });
-  if (!name) return;
-  try {
-    const f = await api.SaveFolder({ id: "", name, parentId });
-    if (parentId) tree.toggle(parentId, true);
-    await reloadTree();
-    tree.select("folder", f.id);
-  } catch (e) { toast(errMsg(e), "err"); }
+/** New folder; asks right away which sessions go in (preselect: ids already ticked). */
+async function newFolder(parentId = "", preselect = []) {
+  const res = await askNewFolder(treeData, parentId, preselect);
+  if (!res) return;
+  let f;
+  try { f = await api.SaveFolder({ id: "", name: res.name, parentId }); } catch (e) { toast(errMsg(e), "err"); return; }
+  if (parentId) tree.toggle(parentId, true);
+  if (res.ids.length) {
+    tree.toggle(f.id, true);
+    await putSessions(res.ids, f.id, res.mode);
+  }
+  await reloadTree();
+  tree.select("folder", f.id);
+}
+
+/** Copies or moves sessions into a folder and opens it in the tree. */
+async function intoFolder(ids, folderId, mode) {
+  if (folderId) tree.toggle(folderId, true);
+  if (await putSessions(ids, folderId, mode)) await reloadTree();
+}
+
+async function addSessionsTo(folder) {
+  const res = await askAddSessions(treeData, folder);
+  if (res) await intoFolder(res.ids, folder.id, res.mode);
+}
+
+async function sessionsToFolder(list) {
+  const res = await askTargetFolder(treeData, list);
+  if (res) await intoFolder(list.map((s) => s.id), res.folderId, res.mode);
 }
 
 async function renameFolder(f) {
@@ -181,7 +202,9 @@ function sessionsMenu(list, x, y) {
       list.slice(1).forEach((s) => { const t = connect(s, false, { join: false }); if (first && t) tabs.addToView(t, first); });
       if (first) tabs.activate(first.id);
     } },
-    { label: `In Oberste Ebene verschieben`, action: async () => { for (const s of list) await api.MoveSession(s.id, "").catch(() => {}); reloadTree(); } },
+    { label: "In Ordner kopieren / verschieben…", action: () => sessionsToFolder(list) },
+    { label: "Neuer Ordner mit diesen Sessions…", action: () => newFolder("", list.map((s) => s.id)) },
+    { label: "In Oberste Ebene verschieben", action: () => intoFolder(list.map((s) => s.id), "", "move") },
     "-",
     { label: `${n} Sessions löschen`, hint: "Entf", danger: true, action: () => removeSessions(list) },
   ]);
@@ -201,6 +224,7 @@ function sessionMenu(s, x, y) {
     "-",
     { label: "Bearbeiten…", hint: "F2", action: () => editExisting(s) },
     { label: "Duplizieren", action: () => act(api.DuplicateSession, s.id) },
+    { label: "In Ordner kopieren / verschieben…", action: () => sessionsToFolder([s]) },
     { label: "In Oberste Ebene verschieben", disabled: !s.folderId, action: () => act(api.MoveSession, s.id, "") },
     { label: "📤 Exportieren zum Teilen…", action: () => exportShare({ sessionIds: [s.id], label: `Session „${s.name}“` }) },
     "-",
@@ -241,6 +265,7 @@ function folderMenu(f, x, y) {
     { label: f.layout ? "▦ Fenster-Layout bearbeiten…" : "▦ Fenster-Layout einrichten…", action: () => setupLayout(f) },
     "-",
     { label: "Neue Session hier…", action: () => newSession(f.id) },
+    { label: "Sessions hinzufügen…", action: () => addSessionsTo(f) },
     { label: "Neuer Unterordner…", action: () => newFolder(f.id) },
     { label: "Alle verbinden", action: () => treeData.sessions.filter((s) => s.folderId === f.id).forEach((s) => connect(s)) },
     { label: "Für alle Sessions ändern… (Benutzer, Passwort …)", action: () => bulkEdit(f) },
@@ -388,6 +413,7 @@ function bindWorkspaceDrop() {
       const tabDrag = el === views && e.dataTransfer.types.includes(TAB_DRAG);
       if (!e.dataTransfer.types.includes(DRAG_TYPE) && !tabDrag) return;
       e.preventDefault();
+      if (!tabDrag) e.dataTransfer.dropEffect = "move"; // a session opens here, nothing is copied
       el.classList.add("drop-open");
       e.target.closest?.(".slot-empty")?.classList.add("drop");
       if (tabDrag) markTile(tabs.tileAt(e.target));
@@ -535,7 +561,7 @@ async function main() {
     menuSession: sessionMenu,
     menuFolder: folderMenu,
     menuRoot: rootMenu,
-    moveSession: (id, folderId) => act(api.MoveSession, id, folderId),
+    dropSessions: (ids, folderId, copy) => intoFolder(ids, folderId, copy ? "copy" : "move"),
     moveFolder: (id, parentId) => act(api.MoveFolder, id, parentId),
     openLayout,
     edit: (type, item) => (type === "session" ? editExisting(item) : renameFolder(item)),

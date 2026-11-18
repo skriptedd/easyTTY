@@ -27,7 +27,7 @@ export class SessionTree {
   /**
    * @param {HTMLElement} el
    * @param {object} handlers {connect(s), menuSession(s,x,y), menuFolder(f,x,y), menuRoot(x,y),
-   *   moveSession(id, folderId), moveFolder(id, parentId), edit(s), remove(item)}
+   *   dropSessions(ids, folderId, copy), moveFolder(id, parentId), edit(s), remove(item)}
    */
   constructor(el, filterInput, handlers) {
     this.el = el;
@@ -345,9 +345,16 @@ export class SessionTree {
 
   bindDrag(n, type, id) {
     n.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ type, id }));
-      e.dataTransfer.effectAllowed = "move";
+      // A marked session takes all marked ones along.
+      const ids = type === "session" && this.marked.has(id) ? [...this.marked].filter((m) => this.session(m)) : [id];
+      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ type, id, ids }));
+      e.dataTransfer.effectAllowed = type === "session" ? "copyMove" : "move";
     });
+  }
+
+  /** Ctrl while dropping sessions: copy instead of move. */
+  static dropEffect(e) {
+    e.dataTransfer.dropEffect = e.ctrlKey && e.dataTransfer.effectAllowed === "copyMove" ? "copy" : "move";
   }
 
   bindDrop(n, folderId) {
@@ -355,6 +362,7 @@ export class SessionTree {
       if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
       e.preventDefault();
       e.stopPropagation();
+      SessionTree.dropEffect(e);
       n.classList.add("drop");
     });
     n.addEventListener("dragleave", () => n.classList.remove("drop"));
@@ -364,7 +372,7 @@ export class SessionTree {
       if (!raw) return;
       e.preventDefault();
       e.stopPropagation();
-      try { this.dropOn(JSON.parse(raw), folderId); } catch { /* foreign drag data */ }
+      try { this.dropOn(JSON.parse(raw), folderId, e.ctrlKey); } catch { /* foreign drag data */ }
     });
   }
 
@@ -372,6 +380,7 @@ export class SessionTree {
     this.el.addEventListener("dragover", (e) => {
       if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
       e.preventDefault();
+      SessionTree.dropEffect(e);
       this.el.classList.add("drop-root");
     });
     this.el.addEventListener("dragleave", (e) => { if (e.target === this.el) this.el.classList.remove("drop-root"); });
@@ -380,14 +389,17 @@ export class SessionTree {
       const raw = e.dataTransfer.getData(DRAG_TYPE);
       if (!raw) return;
       e.preventDefault();
-      try { this.dropOn(JSON.parse(raw), ""); } catch { /* foreign drag data */ }
+      try { this.dropOn(JSON.parse(raw), "", e.ctrlKey); } catch { /* foreign drag data */ }
     });
     addEventListener("dragend", () => this.el.classList.remove("drop-root"));
   }
 
-  dropOn(item, folderId) {
-    if (item.type === "session") this.handlers.moveSession(item.id, folderId);
-    else if (item.id !== folderId) {
+  dropOn(item, folderId, copy = false) {
+    if (item.type === "session") {
+      const ids = Array.isArray(item.ids) && item.ids.length ? item.ids : [item.id];
+      const moving = ids.filter((id) => copy || this.session(id)?.folderId !== folderId);
+      if (moving.length) this.handlers.dropSessions(moving, folderId, copy);
+    } else if (item.id !== folderId) {
       if (folderId) { this.expanded.add(folderId); this.saveExpanded(); }
       this.handlers.moveFolder(item.id, folderId);
     }

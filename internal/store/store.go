@@ -264,19 +264,77 @@ func dropSessions(next *snapshot, ids []string) {
 }
 
 // MoveSession puts a session into another folder ("" = root).
-func (s *Store) MoveSession(id, folderID string) error {
+func (s *Store) MoveSession(id, folderID string) error { return s.MoveSessions([]string{id}, folderID) }
+
+// MoveSessions puts several sessions into a folder ("" = root) in one write.
+// An unknown session or folder changes nothing.
+func (s *Store) MoveSessions(ids []string, folderID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i := s.data.sessionIndex(id)
-	if i < 0 {
-		return ErrNotFound
-	}
-	if !s.data.folderExists(folderID) {
-		return fmt.Errorf("Ordner: %w", ErrNotFound)
+	idx, err := s.data.sessionsIn(ids, folderID)
+	if err != nil {
+		return err
 	}
 	next := s.data.clone()
-	next.Sessions[i].FolderID = folderID
+	for _, i := range idx {
+		next.Sessions[i].FolderID = folderID
+	}
 	return s.commit(next)
+}
+
+// CopySessions copies sessions into a folder ("" = root) in one write, with
+// their stored passwords: a copy in another folder should connect like the
+// original. A copy that lands in the original's own folder is named
+// "… (Kopie)". Layout places are not copied.
+func (s *Store) CopySessions(ids []string, folderID string) ([]Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, err := s.data.sessionsIn(ids, folderID)
+	if err != nil {
+		return nil, err
+	}
+	next := s.data.clone()
+	out := make([]Session, 0, len(idx))
+	for _, i := range idx {
+		cp := next.Sessions[i]
+		if cp.FolderID == folderID {
+			cp.Name += " (Kopie)"
+		}
+		cp.ID = fsutil.NewID()
+		cp.FolderID = folderID
+		cp.LastUsed = 0
+		if enc := next.Secrets[next.Sessions[i].ID]; enc != "" {
+			next.Secrets[cp.ID] = enc
+			cp.HasPassword = true
+		}
+		next.Sessions = append(next.Sessions, cp)
+		out = append(out, cp)
+	}
+	if err := s.commit(next); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// sessionsIn checks a target folder and returns the indexes of the given
+// sessions (each once, in the given order).
+func (s snapshot) sessionsIn(ids []string, folderID string) ([]int, error) {
+	if !s.folderExists(folderID) {
+		return nil, fmt.Errorf("Ordner: %w", ErrNotFound)
+	}
+	seen := make(map[string]bool, len(ids))
+	idx := make([]int, 0, len(ids))
+	for _, id := range ids {
+		i := s.sessionIndex(id)
+		if i < 0 {
+			return nil, ErrNotFound
+		}
+		if !seen[id] {
+			seen[id] = true
+			idx = append(idx, i)
+		}
+	}
+	return idx, nil
 }
 
 // Touch records that a session was just used.

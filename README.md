@@ -80,6 +80,7 @@ Aus SecureCRT kommst du genauso, siehe Einstellungen → „Aus anderen Programm
 - **Tabs und Layouts**: pro Ordner ein Raster mit fester Belegung (bis 6 Fenster), eingerichtet per Drag & Drop. Jedes offene Layout ist ein Block in der Tableiste. Mehrere Layouts laufen parallel, gewechselt wird per Klick, Alt+1…9 oder Strg+Tab. Normal geöffnete Sessions bleiben eigene Tabs, hineingezogene Sessions werden ein Fenster mehr. Offene Fenster tauschen ihren Platz, wenn du sie an der Titelzeile aufeinander ziehst.
 - **Sicheres Einfügen**: große Configs gehen Zeile für Zeile, die nächste erst nach dem Echo des Geräts. Mit Vorschau, Fortschritt, Abbruch und Bericht.
 - **Sammeländerungen**: Rechtsklick auf einen Ordner oder „Alle Sessions“ ändert Benutzer, Passwort, Anmeldeart, Schlüssel, Keepalive oder Farbe für alle Sessions darin.
+- **Sessions in Ordner**: Ein neuer Ordner fragt gleich nach seinen Sessions. Markierte Sessions lassen sich per Rechtsklick oder Ziehen in einen Ordner verschieben, mit Strg kopieren (samt gespeichertem Passwort).
 - **Namensschema**: Groß-/Kleinschreibung und Leerzeichen einheitlich halten.
 - **Befehls-Schnipsel**: häufige Befehle per Klick oder Alt+J in den aktiven Tab.
 - **Hervorhebungen**: IP- und MAC-Adressen, Fehler- und OK-Wörter in Farbe, eigene Regeln als Wortliste oder regulärer Ausdruck.

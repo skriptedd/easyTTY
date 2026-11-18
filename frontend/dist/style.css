@@ -780,6 +780,9 @@ kbd {
 .task-count { flex: none; font-size: 12px; }
 .task-empty { font-size: 12.5px; padding: 4px 0; }
 .task-empty[hidden], .task-sessions [hidden] { display: none; }
+.mode-choice .row { gap: 18px; }
+.mode-choice .hint { margin: 4px 0 0; }
+.folder-list { width: 100%; }
 
 /* tab bar: one block per open layout */
 .tab-block { gap: 7px; }

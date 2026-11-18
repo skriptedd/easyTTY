@@ -513,3 +513,84 @@ func TestKeepAliveIsCapped(t *testing.T) {
 		t.Errorf("huge: %d", got)
 	}
 }
+
+func TestCopySessionsIntoFolderKeepsNameAndPassword(t *testing.T) {
+	st, _ := openTemp(t)
+	f, _ := st.SaveFolder(Folder{Name: "Kunde"})
+	a, _ := st.SaveSession(Session{Name: "sw1", Host: "sw1"})
+	b, _ := st.SaveSession(Session{Name: "sw2", Host: "sw2"})
+	_ = st.SetPassword(a.ID, "secret")
+
+	copies, err := st.CopySessions([]string{a.ID, b.ID}, f.ID)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(copies) != 2 || copies[0].Name != "sw1" || copies[1].Name != "sw2" {
+		t.Fatalf("copies = %+v", copies)
+	}
+	for _, c := range copies {
+		if c.FolderID != f.ID || c.ID == a.ID || c.ID == b.ID {
+			t.Fatalf("bad copy %+v", c)
+		}
+	}
+	if pw, _ := st.Password(copies[0].ID); pw != "secret" {
+		t.Errorf("copy password = %q", pw)
+	}
+	if !copies[0].HasPassword || copies[1].HasPassword {
+		t.Errorf("hasPassword = %v, %v", copies[0].HasPassword, copies[1].HasPassword)
+	}
+	if orig, _ := st.Session(a.ID); orig.FolderID != "" {
+		t.Error("original moved")
+	}
+}
+
+func TestCopySessionsIntoSameFolderMarksCopy(t *testing.T) {
+	st, _ := openTemp(t)
+	a, _ := st.SaveSession(Session{Name: "sw1", Host: "sw1"})
+
+	copies, err := st.CopySessions([]string{a.ID}, "")
+
+	if err != nil || len(copies) != 1 || copies[0].Name != "sw1 (Kopie)" {
+		t.Fatalf("copies %+v, err %v", copies, err)
+	}
+}
+
+func TestCopyAndMoveSessionsChangeNothingOnError(t *testing.T) {
+	st, _ := openTemp(t)
+	f, _ := st.SaveFolder(Folder{Name: "Kunde"})
+	a, _ := st.SaveSession(Session{Host: "sw1"})
+
+	if _, err := st.CopySessions([]string{a.ID, "nope"}, f.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("copy unknown: %v", err)
+	}
+	if err := st.MoveSessions([]string{a.ID, "nope"}, f.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("move unknown: %v", err)
+	}
+	if err := st.MoveSessions([]string{a.ID}, "missing"); err == nil {
+		t.Error("move into missing folder must fail")
+	}
+	if _, err := st.CopySessions([]string{a.ID}, "missing"); err == nil {
+		t.Error("copy into missing folder must fail")
+	}
+	if got := st.Tree(); len(got.Sessions) != 1 || got.Sessions[0].FolderID != "" {
+		t.Fatalf("tree changed: %+v", got.Sessions)
+	}
+}
+
+func TestMoveSessionsMovesAll(t *testing.T) {
+	st, _ := openTemp(t)
+	f, _ := st.SaveFolder(Folder{Name: "Kunde"})
+	a, _ := st.SaveSession(Session{Host: "sw1"})
+	b, _ := st.SaveSession(Session{Host: "sw2"})
+
+	if err := st.MoveSessions([]string{a.ID, b.ID}, f.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, s := range st.Tree().Sessions {
+		if s.FolderID != f.ID {
+			t.Errorf("%s still in %q", s.Host, s.FolderID)
+		}
+	}
+}

@@ -47,6 +47,8 @@ MCP-Werkzeug hier steht.
 | `DeleteSessions` | `ids: string[]` | `error` | Alles oder nichts |
 | `DuplicateSession` | `id: string` | `store.Session, error` | Ohne Passwort |
 | `MoveSession` | `id, folderID: string` | `error` | `""` = oberste Ebene |
+| `MoveSessions` | `ids: string[], folderID: string` | `error` | Alle oder keine; `""` = oberste Ebene |
+| `CopySessions` | `ids: string[], folderID: string` | `store.Session[], error` | Mit gespeichertem Passwort; im selben Ordner heißt die Kopie „… (Kopie)“ |
 | `PatchSessions` | `folderID: string, recursive: bool, p: store.SessionPatch` | `int, error` | Anzahl geänderter Sessions, alles oder nichts |
 | `FormatSessionName` | `name: string` | `string` | Vorschau Namensschema |
 | `ApplyNamingToAll` | – | `int, error` | Anzahl umbenannter Sessions |
