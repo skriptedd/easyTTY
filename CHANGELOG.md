@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.3.3 (2026-11-18)
+
+### Neu
+
+- Gibt es beim Start eine neue Version, meldet easyTTY das jetzt deutlich mit „Ansehen“
+  und „Später“. Bisher stand es nur klein in der Statusleiste.
+
 ## 0.3.2 (2026-11-17)
 
 ### Neu

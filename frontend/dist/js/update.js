@@ -49,13 +49,22 @@ export function showUpdate(info, openCount = 0) {
   }).then(() => { if (typeof stop === "function") stop(); });
 }
 
-/** Listens for the start-up check and offers the update in the status bar. */
+const NOTICE_MS = 20000;
+
+/**
+ * Listens for the start-up check: says so once in a message and keeps the
+ * offer in the status bar.
+ */
 export function initUpdates(slot, openCount) {
   events.on("update:available", (info) => {
     slot.replaceChildren(h("button", {
       class: "status-help update-note", title: `Installiert ist ${info.current}`,
       onclick: () => showUpdate(info, openCount()),
     }, `Update ${info.version} verfügbar`));
+    toast(`Neue Version: easyTTY ${info.version} (installiert ist ${info.current}).`, "ok", NOTICE_MS, [
+      { label: "Ansehen", close: true, action: () => showUpdate(info, openCount()) },
+      { label: "Später", close: true },
+    ]);
   });
 }
 

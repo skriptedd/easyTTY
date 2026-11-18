@@ -81,8 +81,9 @@ Er lauscht auf `127.0.0.1:2222`, Benutzer `test`, Passwort `test`.
 
 ## Update
 
-easyTTY sucht beim Start nach einer neuen Version und zeigt unten rechts
-„Update … verfügbar“. Ein Klick lädt die neue Exe, prüft die Signatur der
+easyTTY sucht beim Start nach einer neuen Version. Gibt es eine, meldet es das
+unten rechts mit „Ansehen“ und behält „Update … verfügbar“ in der Statusleiste.
+„Ansehen“ zeigt die Änderungen, „Jetzt aktualisieren“ lädt die neue Exe, prüft die Signatur der
 Prüfsummen und die SHA-256-Summe der Exe, sichert deine Daten, ersetzt die Exe und
 startet neu. Von Hand geht es in den Einstellungen unter „Updates“. Die Suche beim
 Start lässt sich dort abschalten.

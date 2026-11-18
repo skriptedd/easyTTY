@@ -169,11 +169,16 @@ export function closeX(title, onclick) {
 }
 
 let toastBox = null;
-/** actions: optional [{label, action}] shown as small buttons under the message. */
+/**
+ * actions: optional [{label, action, close}] shown as small buttons under the
+ * message; close: true also removes the message.
+ */
 export function toast(message, kind = "info", ms = 3800, actions = []) {
   if (!toastBox) { toastBox = h("div", { class: "toasts" }); document.body.append(toastBox); }
+  const button = (a) => h("button", { class: "btn small", type: "button",
+    onclick: () => { if (a.close) t.remove(); a.action?.(); } }, a.label);
   const t = h("div", { class: "toast " + kind }, h("span", {}, message),
-    actions.length ? h("div", { class: "toast-actions" }, actions.map((a) => h("button", { class: "btn small", type: "button", onclick: a.action }, a.label))) : null,
+    actions.length ? h("div", { class: "toast-actions" }, actions.map(button)) : null,
     closeX("Meldung schließen", () => t.remove()));
   toastBox.append(t);
   setTimeout(() => t.remove(), ms);
