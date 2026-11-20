@@ -1,5 +1,24 @@
 # Änderungen
 
+## 0.3.5 (2026-11-20)
+
+### Neu
+
+- SFTP: Klick auf „Name“, „Größe“ oder „Geändert“ sortiert die Dateiliste, ein zweiter Klick dreht
+  die Reihenfolge um. Ordner bleiben oben, die Sortierung wird gemerkt.
+- SFTP: Filterfeld über jeder Liste (Strg+F), mehrere Wörter, `*` und `?` als Platzhalter (z. B. `*.log`).
+  Esc zeigt wieder alle. Löschen und Übertragen betreffen nur, was sichtbar ist.
+- SFTP: Umschalt+Enter im Filterfeld (oder der Knopf darunter) sucht im Server-Ordner und allen
+  Unterordnern. Treffer stehen mit ihrem Pfad in der Liste und lassen sich herunterladen, umbenennen,
+  löschen oder per Rechtsklick „Im Ordner zeigen“. Esc oder Backspace führt zurück. Höchstens
+  1000 Treffer, 20 000 Ordner und 2 Minuten; Links auf Ordner werden nicht betreten.
+
+### Behoben
+
+- Lief easyTTY schon länger, bot es beim Update noch die Version vom Programmstart an und
+  scheiterte mit „Version … wird nicht mehr angeboten“. Der Update-Dialog fragt jetzt beim
+  Öffnen nach der aktuellen Version und bietet bei einem Fehlschlag gleich die neuere an.
+
 ## 0.3.4 (2026-11-18)
 
 ### Neu

@@ -90,6 +90,8 @@ MCP-Werkzeug hier steht.
 | `SftpMkdir` | `tabID, dir, name: string` | `error` | |
 | `SftpRename` | `tabID, from, to: string` | `error` | |
 | `SftpRemove` | `tabID: string, paths: string[]` | `error` | Rekursiv |
+| `SftpFind` | `tabID, dir, query: string` | `transfer.FindResult, error` | Sucht in `dir` und allen Unterordnern nach Namen (Wörter, `*`, `?`, ohne Groß/Klein), nächste Ebenen zuerst. Höchstens 1000 Treffer, 20 000 Ordner, 2 Minuten; `stopped` nennt den Grund (`results`, `dirs`, `cancelled`). Links auf Ordner werden nicht betreten |
+| `SftpCancelFind` | `tabID: string` | – | Bricht die laufende Suche ab, sie liefert das bis dahin Gefundene |
 | `SftpUpload` | `tabID, remoteDir: string, localPaths: string[], onExist: string` | `string, error` | Job-ID, `""` wenn nichts zu tun ist. `onExist`: `overwrite`, `rename` (Name (1)) oder `skip` für vorhandene Namen. Ersetzt Zieldateien erst nach vollständiger Übertragung |
 | `SftpDownload` | `tabID: string, remotePaths: string[]` | `string, error` | Zeigt Ordnerdialog |
 | `SftpDownloadTo` | `tabID: string, remotePaths: string[], localDir: string` | `string, error` | Überschreibt nie lokale Dateien |
@@ -182,6 +184,7 @@ MCP-Werkzeug hier steht.
 | `conn.SerialPortInfo` | `name, description, vendor, usb, console` |
 | `transfer.Listing` | `path, entries: Entry[]` |
 | `transfer.Entry` | `name, path, size, mode, modTime, isDir, isLink` |
+| `transfer.FindResult` | `dir, entries: Entry[], dirs, skipped, stopped` |
 | `rdpview.Rect` | `x, y, w, h` |
 | `status.Snapshot` | `kind (linux/cisco), host, os, uptimeSec, uptime, load[], cpus, cpu[], memTotal, memUsed, swapTotal, swapUsed, cpuUsage, disks[{mount,total,used}], procs[{pid,name,cpu,mem}], taken` |
 | `automation.Task` | `id, name, sessionIds[], commands, schedule, enabled, device (auto/cisco/other), stopOnError, autoConfirm, idleTimeout, createdBy?, modifiedBy?, created, updated` |

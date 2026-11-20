@@ -27,6 +27,7 @@ const ICONS = {
   tasks: ["M9 6h11", "M9 12h11", "M9 18h11", "M4 5.5l1 1 2-2", "M4 11.5l1 1 2-2", "M4 17.5l1 1 2-2"],
   firmware: ["M4 4h16v6H4z", "M4 14h16v6H4z", "M8 7h.01", "M8 17h.01", "M15 7h2", "M15 17h2"],
   monitor: ["M3 4h18v12H3z", "M8 20h8", "M12 16v4"],
+  search: ["M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z", "M20 20l-4.8-4.8"],
 };
 
 /** <svg> icon that follows the text colour and size of its button. */

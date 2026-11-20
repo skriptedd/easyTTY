@@ -31,6 +31,14 @@ export function showUpdate(info, openCount = 0) {
         bar.classList.remove("on");
         state.textContent = "Nichts wurde geändert.";
         install.disabled = later.disabled = false;
+        // A newer release came out since the offer: offer that one instead.
+        const now = await api.CheckUpdate().catch(() => null);
+        if (now?.available && now.version !== info.version) {
+          close(null);
+          toast(`Inzwischen gibt es easyTTY ${now.version}.`, "ok");
+          showUpdate(now, openCount);
+          return;
+        }
         toast(errMsg(e), "err", 8000);
       }
     };
@@ -52,6 +60,16 @@ export function showUpdate(info, openCount = 0) {
 const NOTICE_MS = 20000;
 
 /**
+ * Opens the dialog with what the server offers right now: easyTTY may have
+ * run for days since the start-up check, and the release then is outdated.
+ */
+async function offerLatest(info, openCount) {
+  const now = await api.CheckUpdate().catch(() => null);
+  if (now && !now.available) return toast(`easyTTY ${now.current} ist aktuell.`, "ok");
+  return showUpdate(now || info, openCount);
+}
+
+/**
  * Listens for the start-up check: says so once in a message and keeps the
  * offer in the status bar.
  */
@@ -59,10 +77,10 @@ export function initUpdates(slot, openCount) {
   events.on("update:available", (info) => {
     slot.replaceChildren(h("button", {
       class: "status-help update-note", title: `Installiert ist ${info.current}`,
-      onclick: () => showUpdate(info, openCount()),
+      onclick: () => offerLatest(info, openCount()),
     }, `Update ${info.version} verfügbar`));
     toast(`Neue Version: easyTTY ${info.version} (installiert ist ${info.current}).`, "ok", NOTICE_MS, [
-      { label: "Ansehen", close: true, action: () => showUpdate(info, openCount()) },
+      { label: "Ansehen", close: true, action: () => offerLatest(info, openCount()) },
       { label: "Später", close: true },
     ]);
   });

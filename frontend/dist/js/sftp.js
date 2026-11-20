@@ -5,6 +5,38 @@ import { confirmDialog, contextMenu, fmtDate, fmtSize, h, icon, inputDialog, mod
 const DONE_LINGER_MS = 5000;
 const DRAG_TYPE = "application/x-easytty-files";
 const LOCAL_DIR_KEY = "easytty.localDir";
+const SORT_KEY = "easytty.sftpSort."; // + pane kind
+
+// Sortable columns: header label, CSS class, compare function (ascending).
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+const COLUMNS = [
+  { key: "name", label: "Name", cls: "n", cmp: byName },
+  { key: "size", label: "Größe", cls: "s", cmp: (a, b) => (a.size || 0) - (b.size || 0) },
+  { key: "time", label: "Geändert", cls: "m", cmp: (a, b) => (a.modTime || 0) - (b.modTime || 0) },
+];
+
+/** Folders first, then by the column; ties fall back to the name. */
+function sortEntries(list, { key, desc }) {
+  const col = COLUMNS.find((c) => c.key === key) || COLUMNS[0];
+  return [...list].sort((a, b) => {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    if (a.isDir && key === "size") return byName(a, b); // folders have no size
+    const c = col.cmp(a, b) || byName(a, b);
+    return desc ? -c : c;
+  });
+}
+
+/** Case-insensitive; every word must appear in the name; * and ? work as wildcards. */
+function nameFilter(text) {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const tests = words.map((w) => {
+    if (!/[*?]/.test(w)) return (n) => n.includes(w);
+    const re = new RegExp("^" + w.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+    return (n) => re.test(n);
+  });
+  return (e) => { const n = e.name.toLowerCase(); return tests.every((t) => t(n)); };
+}
 
 const remoteParent = (p) => {
   if (!p || p === "/") return "/";
@@ -25,10 +57,22 @@ class FilePane {
   constructor(opts) {
     this.o = opts;
     this.cwd = null;
-    this.entries = [];
+    this.all = []; // the folder as listed
+    this.entries = []; // what is shown: filtered and sorted (rows index into this)
     this.selected = new Set();
     this.anchor = -1;
+    const saved = store.get(SORT_KEY + opts.kind, null);
+    this.sort = COLUMNS.some((c) => c.key === saved?.key) ? { key: saved.key, desc: !!saved.desc } : { key: "name", desc: false };
     const btn = (label, title, fn) => h("button", { class: "btn ghost", title, onclick: fn }, label);
+    this.filterInput = h("input", { class: "sftp-filter", type: "search", spellcheck: "false", placeholder: "Filtern…",
+      title: "Dateien in diesem Ordner nach Namen filtern (Strg+F), * und ? als Platzhalter" });
+    if (opts.find) this.filterInput.title += ". Umschalt+Enter sucht auch in allen Unterordnern";
+    this.filterInput.addEventListener("input", () => { if (this.search) this.endSearch(false); this.refresh(); });
+    this.filterInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); this.escape(); this.list.focus(); }
+      else if (e.key === "Enter" && e.shiftKey && opts.find) { e.preventDefault(); this.find(); }
+      else if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); this.list.focus(); if (this.entries.length && this.anchor < 0) this.clickRow(0, {}); }
+    });
     this.pathInput = h("input", { class: "sftp-path", spellcheck: "false", title: "Pfad eintippen + Enter" });
     this.pathInput.addEventListener("focus", () => this.pathInput.select());
     this.pathInput.addEventListener("keydown", (e) => {
@@ -51,6 +95,7 @@ class FilePane {
         btn("↑", "Übergeordneter Ordner (Backspace)", () => this.up()),
         btn("⌂", opts.kind === "remote" ? "Home-Verzeichnis" : "Start-Ordner (letzter Download-Ordner)", () => opts.home().then((p) => this.load(p)).catch((e) => toast(errMsg(e), "err"))),
         this.pathInput,
+        h("label", { class: "sftp-filter-box", title: this.filterInput.title }, icon("search"), this.filterInput),
         btn(icon("refresh"), "Aktualisieren (F5)", () => this.reload()),
         ...(opts.headExtra || [])),
       opts.tools ? h("div", { class: "sftp-tools" }, opts.tools) : null,
@@ -68,31 +113,149 @@ class FilePane {
   async up() {
     try { this.load(await this.o.parent(this.cwd)); } catch (e) { toast(errMsg(e), "err"); }
   }
-  reload() { return this.load(this.cwd ?? ""); }
+  reload() { return this.search ? this.find() : this.load(this.cwd ?? ""); }
 
   async load(path) {
     if (path === this.o.rootLabel) path = "";
+    if (this.search) this.endSearch(false);
     if (!this.entries.length) this.message("Lade…");
     const seq = (this.loadSeq = (this.loadSeq || 0) + 1);
     try {
       const l = await this.o.load(path);
       if (seq !== this.loadSeq) return; // a newer navigation won
-      if (l.path !== this.cwd) { this.selected.clear(); this.anchor = -1; }
+      const moved = l.path !== this.cwd;
+      if (moved) { this.selected.clear(); this.anchor = -1; this.filterInput.value = ""; }
       this.cwd = l.path;
-      this.entries = l.entries || [];
+      this.all = l.entries || [];
       this.showPath();
-      this.render();
+      this.refresh();
       this.o.onChanged?.(this.cwd);
     } catch (e) {
       if (seq !== this.loadSeq) return;
+      this.entries = []; // nothing stale for Ctrl+A or Delete under the error
+      this.selected.clear();
       this.showPath();
       this.message(errMsg(e), true);
     }
   }
 
+  /** Applies filter and sort to the listed folder and redraws. */
+  refresh() {
+    const keep = this.anchor >= 0 ? this.entries[this.anchor]?.path : null;
+    // Search hits already match; the folder listing goes through the filter.
+    const match = this.search ? null : nameFilter(this.filterInput.value);
+    const source = this.search ? this.search.result?.entries || [] : this.all;
+    this.entries = sortEntries(match ? source.filter(match) : source, this.sort);
+    // Hidden rows leave the selection: Delete or a download must never hit what is not shown.
+    const shown = new Set(this.entries.map((e) => e.path));
+    this.selected = new Set([...this.selected].filter((p) => shown.has(p)));
+    this.anchor = keep ? this.entries.findIndex((e) => e.path === keep) : -1;
+    this.filterInput.parentElement.classList.toggle("on", !!match || !!this.search);
+    this.render();
+  }
+
+  clearFilter() {
+    if (!this.filterInput.value) return;
+    this.filterInput.value = "";
+    this.refresh();
+  }
+
+  /** Esc: first back from the search results to the folder, then the filter goes. */
+  escape() {
+    if (this.search) this.endSearch();
+    else this.clearFilter();
+  }
+
+  /** Searches the open folder and everything below it for the filter text (server only). */
+  async find() {
+    const query = this.filterInput.value.trim();
+    if (!this.o.find || !query || this.cwd === null) return;
+    const seq = (this.findSeq = (this.findSeq || 0) + 1);
+    this.loadSeq = (this.loadSeq || 0) + 1; // a folder still loading must not land under the search
+    this.search = { query, dir: this.cwd, result: null };
+    this.selected.clear();
+    this.anchor = -1;
+    this.refresh();
+    try {
+      const dir = this.search.dir;
+      await this.cancelling; // the cancel of a previous search must not hit this one
+      if (seq !== this.findSeq) return;
+      const result = await this.o.find(dir, query);
+      if (seq !== this.findSeq) return; // ended or replaced meanwhile
+      this.search.result = result;
+      this.refresh();
+    } catch (e) {
+      if (seq !== this.findSeq) return;
+      this.endSearch();
+      toast(errMsg(e), "err");
+    }
+  }
+
+  /** Leaves the search results (a running search is cancelled); redraw=false when the caller redraws. */
+  endSearch(redraw = true) {
+    if (!this.search) return;
+    if (!this.search.result) this.cancelling = this.o.cancelFind?.();
+    this.findSeq = (this.findSeq || 0) + 1;
+    this.search = null;
+    this.selected.clear();
+    this.anchor = -1;
+    if (redraw) this.refresh();
+  }
+
+  /** Name column: in search results the path below the searched folder. */
+  label(e) {
+    if (!this.search) return e.name;
+    const base = this.search.dir.endsWith("/") ? this.search.dir : this.search.dir + "/";
+    return e.path.startsWith(base) ? e.path.slice(base.length) : e.path;
+  }
+
+  /** Lines under the list: search state, filter count, or the offer to search deeper. */
+  notes() {
+    const msg = (text, cls = "sftp-msg") => h("div", { class: cls }, text);
+    const q = this.filterInput.value.trim();
+    if (this.search) {
+      const r = this.search.result;
+      if (!r) {
+        const stop = h("button", { class: "btn small", onclick: () => this.endSearch() }, "Abbrechen");
+        return [h("div", { class: "sftp-msg" }, `Suche „${this.search.query}“ in ${this.search.dir} und allen Unterordnern… `, stop)];
+      }
+      const why = { results: ` Bei ${r.entries.length} Treffern angehalten.`, dirs: ` Nach ${r.dirs} Ordnern angehalten.`, cancelled: " Abgebrochen oder Zeit abgelaufen." }[r.stopped] || "";
+      const skipped = r.skipped ? ` ${r.skipped} Ordner nicht lesbar.` : "";
+      return [msg(`${r.entries.length ? r.entries.length + " Treffer" : "Nichts gefunden"} für „${this.search.query}“ in ${r.dirs} Ordnern unter ${r.dir}.${why}${skipped} Esc zurück zum Ordner.`, "sftp-msg small")];
+    }
+    const out = [];
+    if (!this.entries.length) {
+      out.push(this.all.length ? msg(`Nichts passt zu „${q}“ in diesem Ordner (${this.all.length} Einträge). Esc hebt den Filter auf.`) : msg(this.o.emptyText));
+    } else if (this.entries.length < this.all.length) {
+      out.push(msg(`${this.entries.length} von ${this.all.length} Einträgen · Esc zeigt alle`, "sftp-msg small"));
+    }
+    if (q && this.o.find) {
+      out.push(h("div", { class: "sftp-msg small" },
+        h("button", { class: "btn small", title: "Umschalt+Enter im Filterfeld", onclick: () => this.find() }, icon("search"), ` „${q}“ in allen Unterordnern suchen`)));
+    }
+    return out;
+  }
+
+  /** Click on a column header: sort by it, a second click turns the order round. */
+  sortBy(key) {
+    this.sort = this.sort.key === key ? { key, desc: !this.sort.desc } : { key, desc: key === "time" };
+    store.set(SORT_KEY + this.o.kind, this.sort);
+    this.refresh();
+  }
+
+  header() {
+    return h("div", { class: "sftp-row hdr" }, h("span"), COLUMNS.map((c) => {
+      const on = this.sort.key === c.key;
+      const el = h("span", { class: `${c.cls} sort${on ? " on" : ""}`, title: `Nach ${c.label} sortieren` },
+        c.label, on ? (this.sort.desc ? " ▼" : " ▲") : "");
+      el.addEventListener("click", () => this.sortBy(c.key));
+      return el;
+    }));
+  }
+
   render() {
-    const rows = [h("div", { class: "sftp-row hdr" }, h("span"), h("span", {}, "Name"), h("span", { class: "s" }, "Größe"), h("span", { class: "m" }, "Geändert"))];
-    if (!this.isRoot()) {
+    const rows = [this.header()];
+    if (!this.isRoot() && !this.search) {
       const up = h("div", { class: "sftp-row", title: "Eine Ebene hoch" }, h("span", { class: "i" }, "↰"), h("span", { class: "n" }, ".."), h("span"), h("span"));
       up.addEventListener("dblclick", () => this.up());
       rows.push(up);
@@ -103,7 +266,7 @@ class FilePane {
         title: `${e.mode ? e.mode + "  " : ""}${e.path}`, "data-i": i, draggable: "true",
       },
       h("span", { class: "i" }, e.isDir ? (this.o.kind === "local" && this.cwd === "" ? "💽" : "📁") : e.isLink ? "↪" : "📄"),
-      h("span", { class: "n" }, e.name),
+      h("span", { class: "n" }, this.label(e)),
       h("span", { class: "s" }, e.isDir ? "" : fmtSize(e.size)),
       h("span", { class: "m" }, fmtDate(e.modTime)));
       // Pressing on an already selected row keeps the selection, so several
@@ -129,8 +292,7 @@ class FilePane {
       if (e.isDir) this.bindDrop(r, () => e.path);
       rows.push(r);
     });
-    if (!this.entries.length) rows.push(h("div", { class: "sftp-msg" }, this.o.emptyText));
-    this.list.replaceChildren(...rows);
+    this.list.replaceChildren(...rows, ...this.notes());
   }
 
   /** Accept rows dragged from the other pane; target is the folder under the cursor. */
@@ -179,6 +341,18 @@ class FilePane {
 
   selection() { return this.entries.filter((e) => this.selected.has(e.path)); }
 
+  /** Opens the folder that holds path and selects it there. */
+  async reveal(path) {
+    const parent = await this.o.parent(path);
+    this.filterInput.value = "";
+    await this.load(parent);
+    const i = this.entries.findIndex((e) => e.path === path);
+    if (i < 0) return;
+    this.clickRow(i, {});
+    this.list.querySelector(".sftp-row.selected")?.scrollIntoView({ block: "nearest" });
+    this.list.focus();
+  }
+
   open(e) {
     if (e.isDir) this.load(e.path);
     else this.o.onOpenFile(e);
@@ -186,8 +360,10 @@ class FilePane {
 
   onKey(e) {
     const sel = this.selection();
-    if (e.key === "Backspace") { e.preventDefault(); this.up(); }
+    if (e.key === "Backspace") { e.preventDefault(); if (this.search) this.endSearch(); else this.up(); }
     else if (e.key === "F5") { e.preventDefault(); this.reload(); }
+    else if (e.key === "f" && e.ctrlKey) { e.preventDefault(); this.filterInput.focus(); this.filterInput.select(); }
+    else if (e.key === "Escape" && (this.search || this.filterInput.value)) { e.preventDefault(); e.stopImmediatePropagation(); this.escape(); }
     else if (e.key === "Enter" && sel.length === 1) { e.preventDefault(); this.open(sel[0]); }
     else if (e.key === "a" && e.ctrlKey) { e.preventDefault(); this.selected = new Set(this.entries.map((x) => x.path)); this.paintSelection(); }
     else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -209,7 +385,7 @@ export class SftpPanel {
   }
 
   get cwd() { return this.remote.cwd ?? ""; }
-  get entries() { return this.remote.entries; }
+  get entries() { return this.remote.all; } // the whole folder, also rows the filter hides
 
   build() {
     const btn = (label, title, fn, cls = "btn ghost") => h("button", { class: cls, title, onclick: fn }, label);
@@ -217,6 +393,8 @@ export class SftpPanel {
       kind: "remote",
       title: "Server",
       load: (p) => this.listRemote(p),
+      find: (dir, query) => api.SftpFind(this.tab.id, dir, query),
+      cancelFind: () => api.SftpCancelFind(this.tab.id).catch(() => {}),
       parent: (p) => remoteParent(p),
       home: () => "",
       onOpenFile: (e) => this.download([e.path]),
@@ -295,6 +473,7 @@ export class SftpPanel {
     const items = [];
     if (entry) {
       if (entry.isDir && sel.length === 1) items.push({ label: "Öffnen", action: () => pane.load(entry.path), hint: "Enter" });
+      if (pane.search && sel.length === 1) items.push({ label: "Im Ordner zeigen", action: () => pane.reveal(entry.path) });
       items.push({ label: `⬇ ${sel.length > 1 ? sel.length + " Elemente" : "Herunterladen"} nach „${this.localName()}“`, action: () => this.download(sel.map((e) => e.path)) });
       items.push({ label: "Herunterladen nach… (Ordner wählen)", action: () => this.downloadDialog(sel.map((e) => e.path)) });
       items.push({ label: "Umbenennen", hint: "F2", disabled: sel.length !== 1, action: () => this.rename(entry) });
@@ -352,7 +531,8 @@ export class SftpPanel {
   async rename(entry) {
     const name = await inputDialog({ title: "Umbenennen", label: "Neuer Name", value: entry.name, ok: "Umbenennen" });
     if (!name || name === entry.name) return;
-    try { await api.SftpRename(this.tab.id, entry.path, join(this.cwd, name.trim())); await this.remote.reload(); }
+    // The entry's own folder: in search results that is not the open one.
+    try { await api.SftpRename(this.tab.id, entry.path, join(remoteParent(entry.path), name.trim())); await this.remote.reload(); }
     catch (e) { this.fail("Umbenennen", e); }
   }
 
@@ -463,7 +643,7 @@ export class SftpPanel {
       job.name.textContent = `${arrow} fertig${p.dest ? " → " + p.dest : ""}`;
       job.name.title = p.dest || "";
       if (p.skipped) job.err.textContent = `${p.skipped} übersprungen (Links auf Ordner, Geräte o. Ä.)`;
-      if (p.kind === "upload" && p.dest === this.cwd) this.remote.reload();
+      if (p.kind === "upload" && p.dest === this.cwd && !this.remote.search) this.remote.reload();
       if (p.kind === "download" && p.dest === this.local.cwd) this.local.reload();
       setTimeout(() => { job.el.remove(); this.jobs.delete(p.jobId); }, DONE_LINGER_MS);
       return;

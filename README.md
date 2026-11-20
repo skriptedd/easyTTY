@@ -130,7 +130,7 @@ Alle Kürzel zeigt **Alt+K**. Die Alt-Kürzel lassen sich in den Einstellungen a
 | Baum: Strg+Klick, Shift+Klick, Leertaste | Mehrere markieren |
 | Baum: Shift+Enter | Session ins offene Layout, ohne offenes Layout neben den aktiven Tab |
 | Baum: Strg+Enter | Als neuen Block starten, markierte Sessions zusammen |
-| SFTP: Enter, Backspace, F2, Entf, F5, Strg+A | Öffnen, hoch, umbenennen, löschen, aktualisieren, alles markieren |
+| SFTP: Enter, Backspace, F2, Entf, F5, Strg+A, Strg+F | Öffnen, hoch, umbenennen, löschen, aktualisieren, alles markieren, filtern |
 | Einfügen-Fenster: Enter, Alt+Enter | Senden, neue Zeile |
 
 In RDP-Tabs bleiben Alt+W, E, F, S, K, T, die Ziffern und die Pfeile bei easyTTY, alle anderen Tasten gehen an den Remote-PC.

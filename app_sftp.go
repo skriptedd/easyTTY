@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -85,6 +87,46 @@ func (a *App) SftpList(tabID, dir string) (transfer.Listing, error) {
 	}
 	return transfer.List(c, dir)
 }
+
+const findTimeout = 2 * time.Minute
+
+// SftpFind searches dir and its subfolders for names matching query (words,
+// * and ?). A new search of the same tab cancels the previous one.
+func (a *App) SftpFind(tabID, dir, query string) (transfer.FindResult, error) {
+	c, err := a.sftpFor(tabID)
+	if err != nil {
+		return transfer.FindResult{}, err
+	}
+	a.cancelFinds(tabID)
+	key := findJobPrefix(tabID) + fsutil.NewID()
+	ctx, cancel := context.WithTimeout(a.ctx, findTimeout)
+	a.mu.Lock()
+	a.jobs[key] = cancel
+	a.mu.Unlock()
+	defer func() {
+		cancel()
+		a.mu.Lock()
+		delete(a.jobs, key)
+		a.mu.Unlock()
+	}()
+	return transfer.Find(ctx, c, dir, query)
+}
+
+// SftpCancelFind stops a running search of the tab; it returns what it found so far.
+func (a *App) SftpCancelFind(tabID string) { a.cancelFinds(tabID) }
+
+func (a *App) cancelFinds(tabID string) {
+	prefix := findJobPrefix(tabID)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k, cancel := range a.jobs {
+		if strings.HasPrefix(k, prefix) {
+			cancel()
+		}
+	}
+}
+
+func findJobPrefix(tabID string) string { return "find:" + tabID + ":" }
 
 // SftpMkdir creates a directory inside dir.
 func (a *App) SftpMkdir(tabID, dir, name string) error {
