@@ -4,7 +4,7 @@ import { closeX, contextMenu, h, makeSplitter, modal, toast } from "./ui.js";
 import { keyAction } from "./keys.js";
 import { editPaste } from "./pasteDialog.js";
 import { openConfigDiff } from "./configDiff.js";
-import { HOLD_MS, Highlighter } from "./highlight.js";
+import { HOLD_LIMIT_MS, HOLD_MS, Highlighter } from "./highlight.js";
 import { SftpPanel } from "./sftp.js";
 import { showSSHInfo } from "./sshInfo.js";
 
@@ -34,6 +34,7 @@ const THEMES = {
 
 const RESIZE_DEBOUNCE = 40;
 const ACK_DELAY = 20;
+const ECHO_MS = 300; // output this soon after a key press may be its echo
 const GRAY = "\x1b[90m";
 const RED = "\x1b[31m";
 const RESET = "\x1b[0m";
@@ -63,8 +64,9 @@ export class Tab {
       const bytes = b64ToBytes(b64);
       // The backend counts bytes for flow control, whatever is written here.
       if (this.hl.active) {
-        this.term.write(this.hl.push(this.decoder.decode(bytes, { stream: true })), () => this.ack(bytes.length));
-        if (this.hl.pending && !this.hlTimer) this.hlTimer = setTimeout(() => this.flushHighlight(), HOLD_MS);
+        const echo = performance.now() - (this.typedAt || 0) < ECHO_MS;
+        this.term.write(this.hl.push(this.decoder.decode(bytes, { stream: true }), echo), () => this.ack(bytes.length));
+        this.holdHighlight();
         return;
       }
       this.flushHighlight(); // rules just switched off: the held word must not get lost
@@ -72,10 +74,25 @@ export class Tab {
     })];
   }
 
+  /**
+   * A word cut off at the end waits until no output came for HOLD_MS (more
+   * of it may follow), but never longer than HOLD_LIMIT_MS in all.
+   */
+  holdHighlight() {
+    clearTimeout(this.hlTimer);
+    this.hlTimer = null;
+    if (!this.hl.pending) { this.hlSince = 0; return; }
+    const now = performance.now();
+    if (!this.hl.grew || !this.hlSince) this.hlSince = now; // a new word waits afresh
+    const wait = Math.min(HOLD_MS, Math.max(0, this.hlSince + HOLD_LIMIT_MS - now));
+    this.hlTimer = setTimeout(() => this.flushHighlight(), wait);
+  }
+
   /** Writes a word the highlighter held back because the output stopped mid-word. */
   flushHighlight() {
     clearTimeout(this.hlTimer);
     this.hlTimer = null;
+    this.hlSince = 0;
     if (this.hl.pending) this.term.write(this.hl.flush());
   }
 
@@ -215,7 +232,10 @@ export class Tab {
       }
       return true;
     });
-    t.onData((d) => { if (this.state === "connected") api.Write(this.id, d).catch(() => {}); });
+    t.onData((d) => {
+      this.typedAt = performance.now(); // the next output is likely the echo (see highlighter)
+      if (this.state === "connected") api.Write(this.id, d).catch(() => {});
+    });
     t.onResize(({ cols, rows }) => { if (this.state === "connected") api.Resize(this.id, cols, rows).catch(() => {}); this.mgr.updateStatus(); });
     t.onSelectionChange(() => {
       // Search highlights matches via the selection; that must not hit the clipboard.

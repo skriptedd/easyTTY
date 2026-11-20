@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.3.6 (2026-11-20)
+
+### Behoben
+
+- Hervorhebungen trafen bei stückweise ankommender Ausgabe (langsame Geräte, serielle Konsole)
+  oft nur einen Teil: Von einer IP blieben die letzten Ziffern ungefärbt, „up“, „connected“ oder
+  „notconnect“ wurden mal markiert und mal nicht. Ein angeschnittenes Wort wartet jetzt, bis es
+  vollständig ist (bis 40 ms Ruhe, höchstens 250 ms); nur das Echo getippter Tasten erscheint
+  sofort. Auch `10.0.0.0/24` und `Gi1/0/1` über einer Paketgrenze werden richtig erkannt.
+
 ## 0.3.5 (2026-11-20)
 
 ### Neu

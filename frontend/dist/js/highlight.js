@@ -10,14 +10,17 @@ const ESCAPE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-
 const SGR_SEQ = /^\x1b\[[0-9;:]*m$/;
 const MAX_CARRY = 256; // an unfinished escape longer than this is no escape
 
-// Output arrives in pieces. So that "gro" + "up" is not taken for the word
-// "up", matching sees the end of the text before (CONTEXT), and a word cut
-// off at the end of a piece waits for the next one (at most HOLD_MS, see
-// tab.js), so "up" + "date" is not coloured either.
+// Output arrives in pieces, on slow lines often a few bytes each. So that
+// "gro" + "up" is not taken for the word "up", matching sees the end of the
+// text before (CONTEXT). A word cut off at the end of a piece waits for the
+// rest (see tab.js: until HOLD_MS pass without new output, at most
+// HOLD_LIMIT_MS), so "10.0.0.2" + "3" or "up" + "date" are judged whole.
+// Only the echo of typed keys is never held, it must show at once.
 const CONTEXT = 64;
 const HOLD_MAX = 64;
-const TRAILING_WORD = /[\w.:-]+$/;
-export const HOLD_MS = 15;
+const TRAILING_WORD = /[\w.:/-]+$/; // "/" for 10.0.0.0/24 and Gi1/0/1
+export const HOLD_MS = 40;
+export const HOLD_LIMIT_MS = 250;
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -102,11 +105,16 @@ export class Highlighter {
   flush() {
     const text = this.held;
     this.held = "";
+    this.grew = false;
     return this.plain(text);
   }
 
-  /** Returns text with colour codes around matches. */
-  push(chunk) {
+  /**
+   * Returns text with colour codes around matches. echo: the user just typed,
+   * so a piece that is one bare word is likely the echo and is not held back.
+   */
+  push(chunk, echo = false) {
+    const continued = this.held !== ""; // a word held last time goes on here
     let text = this.carry + this.held + chunk;
     this.carry = "";
     this.held = "";
@@ -132,10 +140,12 @@ export class Highlighter {
       pos = esc.index + seq.length;
     }
     let rest = text.slice(pos);
-    // Hold back a word cut off at the end, unless it is all there is (typed
-    // characters echo one by one and must show at once).
+    // Hold back a word cut off at the end. Not the echo of a typed key: that
+    // is a piece of one bare word right after typing.
     const word = this.carry ? null : TRAILING_WORD.exec(rest);
-    if (word && word[0].length <= HOLD_MAX && word.index + pos > 0) {
+    const isEcho = echo && !continued && word?.index + pos === 0;
+    this.grew = continued && word?.index + pos === 0; // the same word, longer now
+    if (word && word[0].length <= HOLD_MAX && !isEcho) {
       this.held = word[0];
       rest = rest.slice(0, word.index);
     }
