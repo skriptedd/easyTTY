@@ -5,8 +5,11 @@
 
 const SGR = { red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36 };
 
-// One complete escape sequence: CSI, OSC (BEL or ST), or a two-byte ESC.
-const ESCAPE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
+// One complete escape sequence: CSI; OSC, DCS, SOS, PM or APC strings (ended
+// by BEL or ST); ESC with intermediates ("ESC ( B"); or a two-byte ESC
+// ("ESC 7", "ESC M"). A string that has not ended yet does not match, so a
+// window title cut between two chunks is carried over and never coloured.
+const ESCAPE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)|[ -/]+[0-~]|[0-OQ-WYZ\\`-~])/g;
 const SGR_SEQ = /^\x1b\[[0-9;:]*m$/;
 const MAX_CARRY = 256; // an unfinished escape longer than this is no escape
 

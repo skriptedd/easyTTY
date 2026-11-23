@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -131,16 +132,30 @@ func (k *KnownHosts) check(hostname string, remote net.Addr, key ssh.PublicKey) 
 	if len(files) == 0 {
 		return &knownhosts.KeyError{}
 	}
-	cb, err := knownhosts.New(files...)
-	if err != nil {
-		// A foreign known_hosts we cannot parse must not lock the user out.
-		files = existing([]string{k.appFile})
-		if len(files) == 0 {
-			return &knownhosts.KeyError{}
-		}
-		if cb, err = knownhosts.New(files...); err != nil {
+	var usable []string
+	for _, f := range files {
+		_, err := knownhosts.New(f)
+		switch {
+		case err == nil:
+			usable = append(usable, f)
+		case f == k.appFile:
 			return fmt.Errorf("known_hosts lesen: %w", err)
+		default:
+			// A broken line in a foreign known_hosts must neither lock the user
+			// out nor hide the other hosts in it: a changed key of one of them
+			// would then pass as merely unknown. Only the bad lines are left out.
+			if tmp, ok := withoutBadLines(f); ok {
+				defer os.Remove(tmp)
+				usable = append(usable, tmp)
+			}
 		}
+	}
+	if len(usable) == 0 {
+		return &knownhosts.KeyError{}
+	}
+	cb, err := knownhosts.New(usable...)
+	if err != nil {
+		return fmt.Errorf("known_hosts lesen: %w", err)
 	}
 	return cb(hostname, remote, key)
 }
@@ -196,4 +211,52 @@ func existing(paths []string) []string {
 		}
 	}
 	return out
+}
+
+const maxBadLines = 1000
+
+// withoutBadLines writes a temporary copy of a known_hosts file without the
+// lines the parser rejects and returns its path (the caller removes it).
+func withoutBadLines(path string) (string, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	lines := strings.Split(string(raw), "\n")
+	f, err := os.CreateTemp("", "easytty-known_hosts-*")
+	if err != nil {
+		return "", false
+	}
+	tmp := f.Name()
+	f.Close()
+	for range maxBadLines {
+		if err := os.WriteFile(tmp, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+			break
+		}
+		_, err := knownhosts.New(tmp)
+		if err == nil {
+			return tmp, true
+		}
+		n, ok := badLine(err, tmp)
+		if !ok || n < 1 || n > len(lines) {
+			break
+		}
+		lines = append(lines[:n-1:n-1], lines[n:]...)
+	}
+	os.Remove(tmp)
+	return "", false
+}
+
+// badLine reads the line number from a knownhosts parse error ("knownhosts: <file>:<n>: …").
+func badLine(err error, file string) (int, bool) {
+	rest, found := strings.CutPrefix(err.Error(), "knownhosts: "+file+":")
+	if !found {
+		return 0, false
+	}
+	num, _, found := strings.Cut(rest, ":")
+	if !found {
+		return 0, false
+	}
+	n, err := strconv.Atoi(num)
+	return n, err == nil
 }

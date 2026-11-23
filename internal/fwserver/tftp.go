@@ -58,8 +58,11 @@ type tftpServer struct {
 	// uploadDir takes files devices write ("" = uploads off).
 	uploadDir string
 	uploadMu  sync.Mutex // serialises picking the final name of uploads
-	log       func(Event)
-	ip        net.IP // local address transfers answer from
+	// what was uploaded since the start (under uploadMu), see maxUploadTotal
+	uploadedBytes int64
+	uploadedFiles int
+	log           func(Event)
+	ip            net.IP // local address transfers answer from
 
 	mu     sync.Mutex
 	active map[string]*net.UDPConn // peer ip:port (the client's transfer ID) -> socket

@@ -63,7 +63,7 @@ func (a *App) startDial(tabID string, s store.Session, cols, rows int) {
 			cancel()
 		}()
 		if s.Protocol == store.ProtocolSerial {
-			_ = a.terms.Close(tabID) // a COM port opens only once: free it before reconnecting
+			a.terms.Release(tabID) // a COM port opens only once: free it before reconnecting
 		}
 		c, err := a.open(ctx, tabID, s, cols, rows)
 		if err != nil {

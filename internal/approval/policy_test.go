@@ -41,3 +41,14 @@ func TestAllReadOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionAfterTabIsNotReadOnly(t *testing.T) {
+	for _, c := range []string{"display\t-write\t/tmp/x\tx", "show\t-x", "show ip int br\t-v"} {
+		if AllReadOnly([]string{c}) {
+			t.Errorf("%q passed as read-only", c)
+		}
+	}
+	if !AllReadOnly([]string{"show ip int brief"}) {
+		t.Error("plain show refused")
+	}
+}

@@ -317,6 +317,21 @@ func (m *Manager) Close(id string) error {
 	return nil
 }
 
+// Release ends a tab's connection for a reconnect: no "closed" event (the
+// tab is about to connect again), and it returns only once the connection
+// is gone, so a COM port is free for the new one.
+func (m *Manager) Release(id string) {
+	m.mu.Lock()
+	t := m.tabs[id]
+	delete(m.tabs, id)
+	m.mu.Unlock()
+	if t == nil {
+		return
+	}
+	t.shutdown()
+	<-t.done
+}
+
 // CloseAll disconnects every tab and waits for them to finish.
 func (m *Manager) CloseAll() {
 	m.mu.Lock()

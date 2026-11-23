@@ -523,7 +523,7 @@ export class TabManager {
     if (!tab?.sftp || !el.closest(".sftp")) return;
     // Dropped onto a server folder row: upload into that folder.
     const row = el.closest(".pane-remote .sftp-row[data-i]");
-    const entry = row && tab.sftp.entries[+row.dataset.i];
+    const entry = row && tab.sftp.remote.entries[+row.dataset.i]; // the rows as shown (sorted, filtered)
     tab.sftp.upload(paths, entry?.isDir ? entry.path : undefined);
   }
 

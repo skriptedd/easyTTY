@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"golang.org/x/sys/windows"
@@ -62,15 +63,21 @@ func (a *App) FormatSessionName(name string) string { return a.GetSettings().For
 // Returns how many names changed.
 func (a *App) ApplyNamingToAll() (int, error) {
 	changed := 0
+	var failed []string
 	for _, s := range a.store.Tree().Sessions {
 		named := a.applyNaming(s)
 		if named.Name == s.Name {
 			continue
 		}
+		// One session that cannot be saved must not stop the others.
 		if _, err := a.store.SaveSession(named); err != nil {
-			return changed, err
+			failed = append(failed, fmt.Sprintf("„%s“: %v", s.Name, err))
+			continue
 		}
 		changed++
+	}
+	if len(failed) > 0 {
+		return changed, fmt.Errorf("%d umbenannt, nicht möglich bei %s", changed, strings.Join(failed, "; "))
 	}
 	return changed, nil
 }
@@ -161,7 +168,15 @@ func (a *App) updateSettings(change func(store.Settings) (store.Settings, error)
 }
 
 func (a *App) GetSettings() store.Settings {
-	s, _ := store.LoadSettings(a.settingsPath)
+	s, err := store.LoadSettings(a.settingsPath)
+	if err == nil {
+		keep := s
+		a.lastSettings.Store(&keep)
+	} else if last := a.lastSettings.Load(); last != nil {
+		// Unreadable for a moment (being saved, scanned): not the defaults, they
+		// would e.g. switch logging back on.
+		s = *last
+	}
 	if s.LogDir == "" {
 		s.LogDir = a.defaultLogDir()
 	}

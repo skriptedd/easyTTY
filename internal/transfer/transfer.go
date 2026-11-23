@@ -496,12 +496,40 @@ func downloadFile(ctx context.Context, c *sftp.Client, it item, t *tracker) erro
 		os.Remove(tmp)
 		return err
 	}
-	if err := os.Rename(tmp, it.dst); err != nil {
+	dst, err := placeLocal(tmp, it.dst)
+	if err != nil {
 		os.Remove(tmp)
 		return err
 	}
-	_ = os.Chtimes(it.dst, it.mtime, it.mtime)
+	_ = os.Chtimes(dst, it.mtime, it.mtime)
 	return nil
+}
+
+const maxPlaceTries = 100
+
+// placeLocal moves the finished download tmp to dst without ever replacing
+// a file: the free name was picked when the job started, but another
+// download (or the user) may have taken it since. Then the next free
+// "name (n)" is used. Returns the path the file ended up at.
+func placeLocal(tmp, dst string) (string, error) {
+	for range maxPlaceTries {
+		// A hard link fails if dst exists, so taking the name is atomic.
+		err := os.Link(tmp, dst)
+		if err == nil {
+			os.Remove(tmp)
+			return dst, nil
+		}
+		if _, serr := os.Lstat(dst); serr == nil {
+			dst = uniqueLocal(dst, nil)
+			continue
+		}
+		// No hard links here (FAT drive, network share): check, then rename.
+		if err := os.Rename(tmp, dst); err != nil {
+			return "", err
+		}
+		return dst, nil
+	}
+	return "", fmt.Errorf("kein freier Dateiname für %s", dst)
 }
 
 // remoteMover is the part of the SFTP client that swapRemote needs.
@@ -521,8 +549,12 @@ func swapRemote(c remoteMover, tmp, dst string) error {
 	if err := c.PosixRename(tmp, dst); err == nil {
 		return nil
 	}
-	if _, err := c.Lstat(dst); err != nil {
+	fi, err := c.Lstat(dst)
+	if err != nil {
 		return c.Rename(tmp, dst)
+	}
+	if fi != nil && fi.IsDir() { // never park a folder to put a file in its place
+		return fmt.Errorf("%s ist ein Ordner, die Datei wird nicht an seine Stelle gelegt", dst)
 	}
 	bak := dst + remoteBackupSuffix
 	_ = c.Remove(bak)

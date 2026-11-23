@@ -160,7 +160,8 @@ func ListFiles(root string) ([]File, error) {
 			}
 			return nil
 		}
-		if !d.Type().IsRegular() || len(out) >= maxListed {
+		// Hidden files are not served (see resolve), so they are not listed either.
+		if !d.Type().IsRegular() || strings.HasPrefix(d.Name(), ".") || len(out) >= maxListed {
 			return nil
 		}
 		fi, err := d.Info()

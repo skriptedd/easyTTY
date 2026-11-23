@@ -164,13 +164,14 @@ func (s *Store) importBundle(b Bundle, clean func(Session) Session) (ImportSumma
 				parent = p
 			}
 			progress = true
-			if id := findFolder(next, f.Name, parent); id != "" {
-				folderMap[f.ID] = id
-				continue
-			}
+			// Look it up by the name it gets here, so a second import finds it.
 			name := strings.TrimSpace(f.Name)
 			if name == "" {
 				name = "Import"
+			}
+			if id := findFolder(next, name, parent); id != "" {
+				folderMap[f.ID] = id
+				continue
 			}
 			nf := Folder{ID: fsutil.NewID(), Name: name, ParentID: parent}
 			next.Folders = append(next.Folders, nf)

@@ -101,7 +101,7 @@ type Store struct {
 func Open(path string, p Protector) (*Store, error) {
 	st := &Store{path: path, protector: p, now: time.Now}
 	st.data = snapshot{Version: fileVersion, Secrets: map[string]string{}}
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return st, nil
 	}
@@ -115,8 +115,10 @@ func Open(path string, p Protector) (*Store, error) {
 		if berr != nil || json.Unmarshal(bak, &snap) != nil {
 			return nil, fmt.Errorf("Sessions-Datei beschädigt (%s): %w", path, err)
 		}
-		// keep the damaged file for inspection, continue with the backup
+		// keep the damaged file for inspection, continue with the backup; the
+		// next save would otherwise copy the damaged file over the good .bak
 		_ = os.WriteFile(path+".damaged", raw, 0o600)
+		_ = fsutil.Restore(path, bak)
 	}
 	if snap.Version > fileVersion { // saving would drop what this version does not know
 		return nil, fmt.Errorf("Sessions-Datei ist neuer (Version %d) als dieses easyTTY – bitte aktualisieren", snap.Version)
@@ -181,6 +183,9 @@ func (s *Store) SaveSession(in Session) (Session, error) {
 		next.Sessions[i] = sess
 	}
 	if err := next.checkJump(sess); err != nil {
+		return Session{}, err
+	}
+	if err := next.checkJumpUsers(sess.ID, s.data); err != nil {
 		return Session{}, err
 	}
 	if err := s.commit(next); err != nil {
@@ -422,17 +427,22 @@ func (s *Store) SaveFolderLayout(id string, l *Layout) (Folder, error) {
 
 // MoveFolder changes a folder's parent ("" = root).
 func (s *Store) MoveFolder(id, parentID string) error {
+	// One locked step: a rename at the same moment must not be undone.
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	i := s.data.folderIndex(id)
 	if i < 0 {
-		s.mu.Unlock()
 		return ErrNotFound
 	}
-	f := s.data.Folders[i] // copy taken and saved without a gap a rename could fall into
-	f.ParentID = parentID
-	s.mu.Unlock()
-	_, err := s.SaveFolder(f)
-	return err
+	if !s.data.folderExists(parentID) {
+		return fmt.Errorf("Elternordner: %w", ErrNotFound)
+	}
+	if s.data.isDescendant(parentID, id) {
+		return errors.New("Ordner kann nicht in sich selbst verschoben werden")
+	}
+	next := s.data.clone()
+	next.Folders[i].ParentID = parentID
+	return s.commit(next)
 }
 
 // DeleteFolder removes a folder; its sessions and subfolders move up to its parent.
@@ -628,4 +638,39 @@ func (d snapshot) checkJump(s Session) error {
 		id = d.Sessions[i].JumpID
 	}
 	return nil
+}
+
+// checkJumpUsers re-checks the sessions that reach their server through id:
+// a change of id (to Serial, or a longer chain of its own) must not leave
+// them with a chain that can no longer be saved or used.
+func (d snapshot) checkJumpUsers(id string, before snapshot) error {
+	for _, other := range d.Sessions {
+		if other.ID == id || !d.jumpsVia(other, id) {
+			continue
+		}
+		// Only what this change breaks: an old fault elsewhere must not block it.
+		if before.checkJump(other) != nil {
+			continue
+		}
+		if err := d.checkJump(other); err != nil {
+			return fmt.Errorf("„%s“ nutzt diese Session als Sprung-Host: %w", other.Name, err)
+		}
+	}
+	return nil
+}
+
+// jumpsVia tells whether id is somewhere in the jump chain of s.
+func (d snapshot) jumpsVia(s Session, id string) bool {
+	next := s.JumpID
+	for hops := 0; next != "" && hops <= MaxJumps; hops++ {
+		if next == id {
+			return true
+		}
+		i := d.sessionIndex(next)
+		if i < 0 {
+			return false
+		}
+		next = d.Sessions[i].JumpID
+	}
+	return false
 }

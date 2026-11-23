@@ -221,3 +221,32 @@ func TestUploadNameNeverKeepsRunnableEndings(t *testing.T) {
 		}
 	}
 }
+
+func TestUploadEventCarriesNoServedFileMD5(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sw1-confg"), []byte("served file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var got Event
+	s := New(func(e Event) { got = e })
+	s.info.Config.Dir = dir
+	s.log(Event{Proto: "TFTP", File: "sw1-confg", State: "fertig", Upload: true})
+	if got.MD5 != "" {
+		t.Fatalf("upload event got the MD5 of the served file: %s", got.MD5)
+	}
+}
+
+func TestUploadQuotaPerStart(t *testing.T) {
+	s := &tftpServer{}
+	if !s.uploadQuotaLeft() {
+		t.Fatal("fresh server refuses uploads")
+	}
+	s.uploadedFiles = maxUploadFiles
+	if s.uploadQuotaLeft() {
+		t.Fatal("file limit not enforced")
+	}
+	s.uploadedFiles, s.uploadedBytes = 0, maxUploadTotal
+	if s.uploadQuotaLeft() {
+		t.Fatal("size limit not enforced")
+	}
+}

@@ -74,7 +74,8 @@ func New(log func(Event)) *Server {
 		if e.Time == 0 {
 			e.Time = time.Now().UnixMilli()
 		}
-		if e.State == "fertig" && e.File != "" {
+		// An upload is not one of the served files: their MD5 would be wrong.
+		if e.State == "fertig" && e.File != "" && !e.Upload {
 			e.MD5 = s.md5Of(e.File)
 		}
 		log(e)

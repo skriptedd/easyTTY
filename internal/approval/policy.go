@@ -13,6 +13,8 @@ var (
 	showCmd = regexp.MustCompile(`(?i)^\s*(show|display)(\s|$)`)
 	// pipeFilter: output filters allowed after "|".
 	pipeFilter = regexp.MustCompile(`(?i)^\s*(include|inc|i|exclude|exc|e|begin|beg|b|section|sec|count)(\s|$)`)
+	// optionArg: an option after any whitespace (a tab counts, the shell splits on it too).
+	optionArg = regexp.MustCompile(`\s-`)
 )
 
 // AllReadOnly reports whether every command is show/display, without shell
@@ -31,7 +33,7 @@ func AllReadOnly(cmds []string) bool {
 			return false
 		}
 		// Options make no sense on a switch but do on a Linux host ("display -write f").
-		if strings.Contains(parts[0], " -") {
+		if optionArg.MatchString(parts[0]) {
 			return false
 		}
 		for _, p := range parts[1:] {

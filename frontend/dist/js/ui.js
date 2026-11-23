@@ -89,6 +89,16 @@ export function modal(build) {
     back.addEventListener("mousedown", (e) => { if (e.target === back && !spec.sticky) close(undefined); });
     const onKey = (e) => {
       if (back !== layer().lastElementChild) return; // only the top-most modal reacts
+      // Keys belong to the dialog: none may reach a terminal or the tree behind
+      // it. Focus on the page itself (after a click on dialog text), a menu or a
+      // message stays usable: Esc, Ctrl+C and their buttons must still work.
+      const free = e.target === document.body || e.target === document.documentElement || e.target.closest?.(".menu, .toasts");
+      if (!box.contains(e.target) && !free) {
+        e.preventDefault(); e.stopPropagation();
+        focusables(box)[0]?.focus();
+        return;
+      }
+      if (e.key === "Tab") { trapTab(e, box); return; }
       if (e.key === "Escape" && e.target?.type === "search" && e.target.value) {
         // Esc in a filled search box clears it instead of throwing the dialog away.
         e.preventDefault(); e.stopPropagation();
@@ -103,6 +113,24 @@ export function modal(build) {
     const first = box.querySelector("[autofocus]") || box.querySelector("input, select, textarea, button.primary");
     if (first) setTimeout(() => first.focus(), 0);
   });
+}
+
+const FOCUSABLE = "input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])";
+
+/** Visible elements Tab can reach inside el. */
+function focusables(el) {
+  return [...el.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null);
+}
+
+/** Tab and Shift+Tab go round inside the dialog instead of leaving it. */
+function trapTab(e, box) {
+  const list = focusables(box);
+  if (!list.length) { e.preventDefault(); return; }
+  const first = list[0];
+  const last = list[list.length - 1];
+  if (!box.contains(document.activeElement)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); return; }
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
 export function confirmDialog({ title, message, ok = "OK", danger = false }) {

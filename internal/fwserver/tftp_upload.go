@@ -21,6 +21,10 @@ import (
 const (
 	maxUpload     = 64 << 20
 	maxUploadName = 120
+	// Per server start: anyone in the network may upload, the disk must not
+	// fill up from a loop of uploads.
+	maxUploadTotal = 1 << 30
+	maxUploadFiles = 500
 )
 
 var errUploadTooBig = fmt.Errorf("größer als %d MB", maxUpload>>20)
@@ -92,6 +96,12 @@ func (s *tftpServer) receive(name, mode string, opts map[string]string, peer *ne
 		return
 	}
 	ev.File = clean
+	if !s.uploadQuotaLeft() {
+		s.replyError(peer, 3, "easyTTY: Upload-Grenze erreicht")
+		ev.State, ev.Detail = "abgelehnt", fmt.Sprintf("Upload-Grenze dieses Serverstarts erreicht (%d Dateien / %d MB)", maxUploadFiles, maxUploadTotal>>20)
+		s.log(ev)
+		return
+	}
 	if v, ok := opts["tsize"]; ok {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > maxUpload {
 			s.replyError(peer, 3, "easyTTY: Datei zu groß")
@@ -160,7 +170,21 @@ func (s *tftpServer) place(tmp, name string) (string, error) {
 	s.uploadMu.Lock()
 	defer s.uploadMu.Unlock()
 	final := freeUploadPath(s.uploadDir, name)
-	return final, os.Rename(tmp, final)
+	if err := os.Rename(tmp, final); err != nil {
+		return final, err
+	}
+	if fi, err := os.Stat(final); err == nil {
+		s.uploadedBytes += fi.Size()
+	}
+	s.uploadedFiles++
+	return final, nil
+}
+
+// uploadQuotaLeft reports whether this server start may take another upload.
+func (s *tftpServer) uploadQuotaLeft() bool {
+	s.uploadMu.Lock()
+	defer s.uploadMu.Unlock()
+	return s.uploadedFiles < maxUploadFiles && s.uploadedBytes < maxUploadTotal
 }
 
 func convertNetascii(path string) error {

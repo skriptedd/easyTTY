@@ -500,7 +500,7 @@ export async function editSettings(current, onImport, onRenamed, share = {}) {
       h("div", { class: "full share-row" },
         h("button", { class: "btn", type: "button", onclick: () => share.exportAll?.() }, "📤 Alles exportieren…"),
         h("button", { class: "btn", type: "button", onclick: () => share.exportSettings?.() }, "📤 Nur Einstellungen…"),
-        h("button", { class: "btn", type: "button", onclick: () => share.importShare?.() }, "📥 Importieren…")),
+        h("button", { class: "btn", type: "button", onclick: () => { close(null); share.importShare?.(); } }, "📥 Importieren…")),
       h("div", { class: "full hint" }, "Export ohne Benutzer, Passwörter und persönliche Pfade. Einzelne Ordner und Sessions: Rechtsklick im Baum."),
       h("div", { class: "field full section" }, h("span", {}, "Aus anderen Programmen übernehmen")),
       h("div", { class: "full share-row" },

@@ -13,7 +13,8 @@ export function editLayout(folder, sessions) {
   const own = sessions.filter((s) => s.folderId === folder.id);
   const others = sessions.filter((s) => s.folderId !== folder.id);
   let template = folder.layout?.template || templateFor(own.length);
-  let slots = folder.layout?.slots?.slice() || own.map((s) => s.id);
+  // A tile whose session no longer exists counts as free.
+  let slots = (folder.layout?.slots || own.map((s) => s.id)).map((id) => (sessions.some((s) => s.id === id) ? id : ""));
 
   const tplRow = h("div", { class: "tpl-row" });
   const preview = h("div", { class: "tpl-preview" });

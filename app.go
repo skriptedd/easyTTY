@@ -43,21 +43,22 @@ type App struct {
 	home         string
 	portable     bool // data lives next to the exe (see portable.go)
 
-	mu         sync.Mutex
-	dials      map[string]*dial              // tabId -> pending dial
-	sftp       map[string]*sftp.Client       // tabId -> lazily opened SFTP
-	jobs       map[string]context.CancelFunc // jobId -> running transfer
-	pastes     map[string]context.CancelFunc // tabId -> running paced paste
-	statusKind map[string]string             // tabId -> detected device kind (status panel)
-	prompts    map[string]chan promptAnswer
-	lastDown   string
-	fw         *fwserver.Server // firmware server, created on first use
-	fwEvents   []fwserver.Event
-	auto       *automation.Engine // scheduled tasks (nil if the store failed to load)
-	rdp        *rdpview.Host      // RDP controls inside the window, started on first use
-	relaunch   []string           // command to run after shutdown (set by an update)
-	settingsMu sync.Mutex         // one read-modify-write of settings.json at a time
-	updating   atomic.Bool
+	mu           sync.Mutex
+	dials        map[string]*dial              // tabId -> pending dial
+	sftp         map[string]*sftp.Client       // tabId -> lazily opened SFTP
+	jobs         map[string]context.CancelFunc // jobId -> running transfer
+	pastes       map[string]context.CancelFunc // tabId -> running paced paste
+	statusKind   map[string]string             // tabId -> detected device kind (status panel)
+	prompts      map[string]chan promptAnswer
+	lastDown     string
+	fw           *fwserver.Server // firmware server, created on first use
+	fwEvents     []fwserver.Event
+	auto         *automation.Engine             // scheduled tasks (nil if the store failed to load)
+	rdp          *rdpview.Host                  // RDP controls inside the window, started on first use
+	relaunch     []string                       // command to run after shutdown (set by an update)
+	settingsMu   sync.Mutex                     // one read-modify-write of settings.json at a time
+	lastSettings atomic.Pointer[store.Settings] // last readable settings.json, used while it is locked
+	updating     atomic.Bool
 
 	// MCP (AI access): endpoint, open tabs it may see, approval gate.
 	gate     *approval.Gate

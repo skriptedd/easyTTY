@@ -201,3 +201,8 @@ func (s *Server) session(ch ssh.Channel, reqs <-chan *ssh.Request) {
 		}
 	}
 }
+
+// StartRekey starts a server that renegotiates keys after a few hundred bytes.
+func StartRekey(t *testing.T, user, password string) *Server {
+	return start(t, user, password, nil, func(c *ssh.ServerConfig) { c.RekeyThreshold = 256 })
+}

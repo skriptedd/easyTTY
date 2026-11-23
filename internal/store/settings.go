@@ -213,7 +213,7 @@ func MergeSnippets(local, extra []Snippet) []Snippet {
 
 // LoadSettings reads settings from path, falling back to defaults.
 func LoadSettings(path string) (Settings, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return DefaultSettings(), nil
 	}
@@ -228,6 +228,7 @@ func LoadSettings(path string) (Settings, error) {
 			return DefaultSettings(), fmt.Errorf("Einstellungen beschädigt: %w", err)
 		}
 		_ = os.WriteFile(path+".damaged", raw, 0o600) // kept for inspection
+		_ = fsutil.Restore(path, bak)                 // the next save must not back up the damaged file
 	}
 	return s.Sanitize(), nil
 }

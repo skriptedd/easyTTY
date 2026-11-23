@@ -88,6 +88,7 @@ type SSHConn struct {
 	mu      sync.Mutex
 	closers []io.Closer // port forwards, ended with the connection
 	closed  bool
+	lost    error // why the connection was dropped from this side, if not by the user
 
 	info SSHInfo // fixed after Dial
 }
@@ -177,6 +178,9 @@ func (d Dialer) dial(ctx context.Context, cfg SSHConfig) (_ *ssh.Client, info SS
 	// A timer on top of the deadline: the channel through a jump host has no
 	// deadlines, there only closing it ends a handshake that hangs.
 	var timedOut atomic.Bool
+	// x/crypto/ssh calls the host key callback on every key exchange, also on
+	// rekeys long after the login. Only the login handshake has a deadline.
+	var loggedIn atomic.Bool
 	watch := time.AfterFunc(timeout, func() {
 		timedOut.Store(true)
 		raw.Close()
@@ -184,10 +188,16 @@ func (d Dialer) dial(ctx context.Context, cfg SSHConfig) (_ *ssh.Client, info SS
 	watch.Stop()
 	defer watch.Stop()
 	arm := func() {
+		if loggedIn.Load() {
+			return
+		}
 		_ = raw.SetDeadline(time.Now().Add(timeout))
 		watch.Reset(timeout)
 	}
 	pause := func() {
+		if loggedIn.Load() {
+			return
+		}
 		_ = raw.SetDeadline(time.Time{})
 		watch.Stop()
 	}
@@ -229,6 +239,7 @@ func (d Dialer) dial(ctx context.Context, cfg SSHConfig) (_ *ssh.Client, info SS
 
 	arm()
 	sc, chans, reqs, hsErr := ssh.NewClientConn(raw, addr, config)
+	loggedIn.Store(true)
 	watch.Stop()
 	if hsErr == nil && timedOut.Load() { // the timer closed the connection just as the handshake ended
 		hsErr = errors.New("Zeitüberschreitung")
@@ -503,6 +514,9 @@ func (c *SSHConn) keepAlive(every time.Duration) {
 				_, _, err := c.client.SendRequest("keepalive@openssh.com", true, nil)
 				return err
 			}); err != nil {
+				c.mu.Lock()
+				c.lost = errors.New("Verbindung verloren: keine Antwort auf Keepalive")
+				c.mu.Unlock()
 				c.Close()
 				return
 			}
@@ -514,6 +528,12 @@ func (c *SSHConn) keepAlive(every time.Duration) {
 func (c *SSHConn) Read(p []byte) (int, error) {
 	n, err := c.out.Read(p)
 	if errors.Is(err, io.ErrClosedPipe) {
+		c.mu.Lock()
+		lost := c.lost
+		c.mu.Unlock()
+		if lost != nil {
+			return n, lost // dropped for a reason the user should see
+		}
 		err = io.EOF // closed by us: a normal end, not "read/write on closed pipe"
 	}
 	return n, err

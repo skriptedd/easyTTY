@@ -1,5 +1,45 @@
 # Änderungen
 
+## 0.3.7 (2026-11-23)
+
+### Behoben
+
+- SSH: Nach jeder Neuaushandlung der Schlüssel (etwa alle 1 GB oder zeitgesteuert vom Server)
+  wurde die Verbindung 20 s später getrennt und als normales „Verbindung beendet“ gemeldet.
+- SSH: Eine fehlerhafte Zeile in `~/.ssh/known_hosts` ließ alle dort bekannten Hosts als
+  „unbekannt“ gelten – ein geänderter Hostkey kam dann ohne Warnung als normale Rückfrage.
+  Jetzt wird nur die kaputte Zeile übergangen.
+- SSH: Ein Abbruch wegen fehlender Keepalive-Antwort wird als Fehler gemeldet statt als normales Ende.
+- Seriell: „Neu verbinden“ zeigte auf der wieder laufenden Verbindung „Verbindung beendet“
+  und die Neu-verbinden-Leiste.
+- SFTP: Dateien aus dem Explorer auf einen Server-Ordner gezogen landeten bei sortierter oder
+  gefilterter Liste im falschen Ordner.
+- SFTP: Zwei Downloads gleichen Namens in denselben Ordner konnten sich überschreiben.
+- SFTP: Eine hochgeladene Datei ersetzt keinen gleichnamigen Ordner auf dem Server mehr.
+- SFTP: Server-Dateien aus einem anderen Tab (Fensterteilung) lassen sich nicht mehr auf den
+  falschen Server ziehen.
+- Speichern scheiterte gelegentlich, wenn gerade ein anderer Zugriff (Virenscanner, Sync-Tool,
+  zweites Lesen) die Datei offen hatte. Kurz unlesbare Einstellungen fielen dabei auf die
+  Standardwerte zurück (z. B. Logging wieder an).
+- Nach dem Rücksprung auf `sessions.json.bak` überschrieb das nächste Speichern die gute
+  Sicherung mit der beschädigten Datei.
+- Sprung-Hosts: Eine Session, über die andere springen, lässt sich nicht mehr so ändern, dass
+  diese nicht mehr speicherbar sind. „Schema jetzt anwenden“ bricht nicht mehr bei der ersten
+  nicht speicherbaren Session ab.
+- Import: Ordnernamen mit Leerzeichen am Rand wurden bei jedem erneuten Import neu angelegt.
+- Einstellungen: „Speichern“ nach einem Import aus dem Einstellungsfenster machte die
+  importierten Einstellungen rückgängig.
+- Dialoge halten den Tastaturfokus: Tab springt nicht mehr hinaus, Tippen landet nie im
+  Terminal dahinter.
+- Hervorhebung: Ein Fenstertitel (OSC), der über zwei Datenpakete ging, wurde zerstückelt
+  und teils ins Terminal geschrieben.
+- KI-Zugriff: Ein Tabulator vor einer Option (`display<Tab>-write …`) galt als harmloser
+  show-Befehl und lief ohne Freigabe.
+- Firmware-Server: TFTP-Uploads sind pro Serverstart auf 500 Dateien und 1 GB begrenzt, ein
+  Upload zeigt keine MD5 einer gleichnamigen Firmware-Datei mehr, versteckte Dateien stehen
+  nicht mehr in der Dateiliste.
+- Layout-Editor: Fenster mit gelöschten Sessions gelten als frei.
+
 ## 0.3.6 (2026-11-20)
 
 ### Behoben

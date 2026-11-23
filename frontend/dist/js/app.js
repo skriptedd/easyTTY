@@ -341,7 +341,11 @@ async function openSettings() {
     importSecureCRT: () => importSecureCRT(),
     checkUpdate: () => checkNow(() => tabs.tabs.length),
   });
-  if (!s) return;
+  if (!s) {
+    // Cancelled, but "Schema jetzt anwenden" may have saved on its own meanwhile.
+    settings = await api.GetSettings().catch(() => settings);
+    return;
+  }
   settings = s;
   applyTheme();
   tabs.applySettings(s);

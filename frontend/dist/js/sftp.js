@@ -286,7 +286,7 @@ class FilePane {
       r.addEventListener("dragstart", (ev) => {
         this.pendingNarrow = -1;
         if (!this.selected.has(e.path)) { this.selected = new Set([e.path]); this.paintSelection(); }
-        ev.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: this.o.kind, paths: this.selection().map((x) => x.path) }));
+        ev.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: this.o.kind, owner: this.o.owner, paths: this.selection().map((x) => x.path) }));
         ev.dataTransfer.effectAllowed = "copy";
       });
       if (e.isDir) this.bindDrop(r, () => e.path);
@@ -312,7 +312,10 @@ class FilePane {
       e.stopPropagation();
       let data;
       try { data = JSON.parse(raw); } catch { return; }
-      if (data.kind !== this.o.kind) this.o.onDropFiles(data, targetDir());
+      if (data.kind === this.o.kind) return;
+      // Server paths only mean something on their own server (two SFTP panels side by side).
+      if (data.kind === "remote" && data.owner !== this.o.owner) { toast("Dateien eines anderen Servers lassen sich hier nicht ablegen – in dessen eigenen PC-Bereich ziehen.", "err"); return; }
+      this.o.onDropFiles(data, targetDir());
     });
   }
 
@@ -392,6 +395,7 @@ export class SftpPanel {
     this.remote = new FilePane({
       kind: "remote",
       title: "Server",
+      owner: this.tab.id,
       load: (p) => this.listRemote(p),
       find: (dir, query) => api.SftpFind(this.tab.id, dir, query),
       cancelFind: () => api.SftpCancelFind(this.tab.id).catch(() => {}),
@@ -416,6 +420,7 @@ export class SftpPanel {
     this.local = new FilePane({
       kind: "local",
       title: "Dieser PC",
+      owner: this.tab.id,
       rootLabel: "Dieser PC",
       load: (p) => api.LocalList(p),
       parent: (p) => api.LocalParent(p),
