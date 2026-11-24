@@ -125,6 +125,7 @@ Alle Kürzel zeigt **Alt+K**. Die Alt-Kürzel lassen sich in den Einstellungen a
 | Alt+J | Befehls-Schnipsel |
 | Alt+D | Tab duplizieren |
 | Alt+L | Logs & Dateien (Logs, Configs, Schnipsel-Ausgaben suchen und öffnen) |
+| Alt+H | Neue Session anlegen (im markierten Ordner) |
 | Alt+N, F7 | Neuer Ordner (im SFTP dort, sonst im Session-Baum) |
 | Alt + / −, Alt+=, Strg+Mausrad | Schriftgröße größer, kleiner, normal |
 | Baum: Enter, F2, Entf | Verbinden, bearbeiten, löschen |

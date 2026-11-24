@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.3.9 (2026-11-24)
+
+### Neu
+
+- Neue Session per Tastatur: Alt+H öffnet „Neue Session“ im markierten Ordner (ohne
+  Alt-Kürzel: Strg+Shift+H).
+
 ## 0.3.8 (2026-11-24)
 
 ### Neu

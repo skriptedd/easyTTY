@@ -11,6 +11,7 @@ export const SHORTCUTS = [
     [["Strg", "Tab"], "Nächster Tab, mit Shift der vorherige (Alt+Tab gehört Windows)"],
     [["Alt", "S"], "Seitenleiste ein/aus"],
     [["Alt", "L"], "Logs & Dateien: Logs, Configs, Schnipsel-Ausgaben suchen und öffnen"],
+    [["Alt", "H"], "Neue Session anlegen (im markierten Ordner)"],
     [["Alt", "N"], "Neuer Ordner (im SFTP dort, sonst im Session-Baum)"],
     [["Alt", "U"], "Firmware-Server (Images per TFTP/HTTP/SCP an Switche)"],
     [["Alt", "A"], "Aufgaben und Zeitpläne (Befehle auf Geräten ausführen)"],

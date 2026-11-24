@@ -582,6 +582,7 @@ function runAction(action) {
     case "tasks": openTasks(); return true;
     case "log": showFiles({ select: tab?.logPath || "" }); return true;
     case "newfolder": newFolderHere(); return true;
+    case "newsession": newSession(tree.folderForNew()); return true; // in the marked folder
     case "next": tabs.cycle(1); return true;
     case "prev": tabs.cycle(-1); return true;
     case "tab": tabs.showNth(+arg - 1); return true;

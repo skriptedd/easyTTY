@@ -24,6 +24,7 @@ const ALT = {
   a: "tasks",
   j: "snippets",
   n: "newfolder",
+  h: "newsession",
 };
 
 // Font size: Alt+Plus / Alt+Minus, Alt+= (Shift+0 on German keyboards) resets.
@@ -50,4 +51,4 @@ export function keyAction(e, { altKeys = true } = {}) {
 }
 
 /** Actions that also work while typing in a form field (quick connect etc.). */
-export const GLOBAL_IN_FIELDS = new Set(["quick", "sidebar", "help", "status", "firmware", "tasks", "tree", "terminal", "close", "zoom", "next", "prev"]);
+export const GLOBAL_IN_FIELDS = new Set(["quick", "sidebar", "help", "status", "firmware", "tasks", "tree", "newsession", "terminal", "close", "zoom", "next", "prev"]);
