@@ -9,6 +9,7 @@ import { initMcp } from "./mcp.js";
 import { exportShare, importShare } from "./share.js";
 import { StatusPanel } from "./statusPanel.js";
 import { showShortcuts } from "./shortcuts.js";
+import { showFiles } from "./files.js";
 import { DRAG_TYPE, SessionTree } from "./tree.js";
 import { checkNow, initUpdates, showVersion } from "./update.js";
 import { manageSnippets, snippetMenu } from "./snippets.js";
@@ -96,6 +97,13 @@ async function editExisting(s) {
   if (!res) return;
   await reloadTree();
   if (res.connect) connect(res.session);
+}
+
+/** Alt+N: a folder where the keyboard is, in the SFTP browser or in the session tree. */
+function newFolderHere() {
+  const tab = tabs.current();
+  if (tab?.sftp && tab.sftp.el.contains(document.activeElement)) { tab.sftp.mkdirHere(); return; }
+  newFolder(tree.folderForNew());
 }
 
 /** New folder; asks right away which sessions go in (preselect: ids already ticked). */
@@ -404,6 +412,8 @@ function bindDragOverRdp() {
  */
 function bindWorkspaceDrop() {
   const views = $("tabviews");
+  const hint = h("div", { class: "drop-hint", hidden: true }, h("span", {}));
+  views.append(hint);
   let marked = null; // the tile a dragged tab would land on
   const markTile = (tile) => {
     if (tile === marked) return;
@@ -411,7 +421,9 @@ function bindWorkspaceDrop() {
     tile?.view.classList.add("drop-tile");
     marked = tile;
   };
-  addEventListener("dragend", () => markTile(null));
+  const clear = () => { markTile(null); hint.hidden = true; };
+  addEventListener("dragend", clear);
+  addEventListener("drop", clear, true);
   for (const el of [views, $("tabbar")]) {
     el.addEventListener("dragover", (e) => {
       const tabDrag = el === views && e.dataTransfer.types.includes(TAB_DRAG);
@@ -419,16 +431,21 @@ function bindWorkspaceDrop() {
       e.preventDefault();
       if (!tabDrag) e.dataTransfer.dropEffect = "move"; // a session opens here, nothing is copied
       el.classList.add("drop-open");
-      e.target.closest?.(".slot-empty")?.classList.add("drop");
-      if (tabDrag) markTile(tabs.tileAt(e.target));
+      const slot = e.target.closest?.(".slot-empty");
+      slot?.classList.add("drop");
+      if (el !== views) return;
+      const over = tabs.tileAt(e.target);
+      markTile(tabDrag ? over : null);
+      // A folder from the tree (effectAllowed "move") opens its layout, no preview.
+      showDropHint(hint, slot || (!tabDrag && e.dataTransfer.effectAllowed === "move") ? null : dropTarget(e, views, tabDrag, over));
     });
     el.addEventListener("dragleave", (e) => {
       e.target.closest?.(".slot-empty")?.classList.remove("drop");
-      if (!el.contains(e.relatedTarget)) { el.classList.remove("drop-open"); markTile(null); }
+      if (!el.contains(e.relatedTarget)) { el.classList.remove("drop-open"); clear(); }
     });
     el.addEventListener("drop", (e) => {
       el.classList.remove("drop-open");
-      markTile(null);
+      clear();
       const slot = e.target.closest?.(".slot-empty");
       const tabId = el === views && e.dataTransfer.getData(TAB_DRAG);
       if (tabId) { // a tab from the tab bar: into this view
@@ -436,8 +453,10 @@ function bindWorkspaceDrop() {
         const tab = tabs.byId(tabId);
         if (!tab) return;
         const over = tabs.tileAt(e.target);
+        const where = dropTarget(e, views, true, over);
         if (slot) tabs.moveToSlot(tab, slot.dataset.group, +slot.dataset.slot);
-        else if (over?.groupId && over.groupId === tab.groupId) tabs.swapTiles(tab, over);
+        else if (where?.kind === "swap") tabs.swapTiles(tab, over);
+        else if (where?.kind === "split" && tabs.splitWith(tab, tabs.current(), where.side)) tabs.activate(tab.id);
         else if (tabs.addToView(tab)) tabs.activate(tab.id);
         return;
       }
@@ -456,12 +475,55 @@ function bindWorkspaceDrop() {
       if (!s) return;
       if (slot) { tabs.fillSlot(slot.dataset.group, +slot.dataset.slot, s); setTimeout(reloadTree, 300); return; }
       if (el !== views) { connect(s, false, { join: false }); return; } // tab bar: own tab
-      // Workspace: a single tab becomes a split view, an open view grows.
+      // Workspace: beside a single tab on the side it was dropped, or one more tile in a view.
+      const where = dropTarget(e, views, false, null);
       const anchor = tabs.current();
       const tab = connect(s, false, { join: false });
-      if (anchor && tab && tabs.addToView(tab, anchor)) tabs.activate(tab.id);
+      if (!anchor || !tab) return;
+      if (where?.kind === "split" ? tabs.splitWith(tab, anchor, where.side) : tabs.addToView(tab, anchor)) tabs.activate(tab.id);
     });
   }
+}
+
+const SIDE_LABEL = { left: "Links daneben", right: "Rechts daneben", top: "Oben drüber", bottom: "Darunter" };
+
+/**
+ * What a drop at e would do: split a single tab on the nearest edge, swap
+ * two tiles of a view, add a tile, or open alone (empty workspace).
+ */
+function dropTarget(e, views, tabDrag, over) {
+  const cur = tabs.current();
+  const dragged = tabDrag ? tabs.draggedTab : null;
+  if (!cur) return { kind: "alone" };
+  const view = tabs.groupOf(cur);
+  if (view) {
+    if (tabDrag && over && over !== dragged && over.groupId && dragged?.groupId === over.groupId) return { kind: "swap", tile: over };
+    if (tabDrag && dragged?.groupId === view.id) return null; // already in this view
+    return { kind: "grow" };
+  }
+  if (tabDrag && (!dragged || dragged === cur)) return null; // the tab already shown: nothing to do
+  const r = views.getBoundingClientRect();
+  const dist = { left: e.clientX - r.left, right: r.right - e.clientX, top: e.clientY - r.top, bottom: r.bottom - e.clientY };
+  const side = Object.keys(dist).reduce((a, b) => (dist[b] < dist[a] ? b : a));
+  return { kind: "split", side };
+}
+
+/** Shades the part of the workspace a drop would fill and says what happens. */
+function showDropHint(hint, where) {
+  // A swap needs no shade: the tile itself lights up (drop-tile).
+  if (!where || where.kind === "swap") { hint.hidden = true; return; }
+  const box = { left: "0", top: "0", right: "0", bottom: "0" };
+  let text = "Hier öffnen";
+  if (where.kind === "split") {
+    const opposite = { left: "right", right: "left", top: "bottom", bottom: "top" }[where.side];
+    box[opposite] = "50%";
+    text = SIDE_LABEL[where.side];
+  } else if (where.kind === "grow") {
+    text = "Als weiteres Fenster in die Ansicht";
+  }
+  Object.assign(hint.style, box);
+  hint.firstChild.textContent = text;
+  hint.hidden = false;
 }
 
 const SIDEBAR_KEY = "easytty.sidebarHidden";
@@ -518,6 +580,8 @@ function runAction(action) {
     case "terminal": tabs.current()?.focus(); return true;
     case "firmware": openFirmware(tabs); return true;
     case "tasks": openTasks(); return true;
+    case "log": showFiles({ select: tab?.logPath || "" }); return true;
+    case "newfolder": newFolderHere(); return true;
     case "next": tabs.cycle(1); return true;
     case "prev": tabs.cycle(-1); return true;
     case "tab": tabs.showNth(+arg - 1); return true;
@@ -536,7 +600,6 @@ function runAction(action) {
     case "search": tab.openSearch(); return true;
     case "copy": tab.copy(); return true;
     case "paste": tab.paste(); return true;
-    case "log": tab.revealLog(); return true;
     case "font": tab.zoom(arg === "+" ? 1 : arg === "-" ? -1 : 0); return true;
     case "snippets": openSnippets(); return true;
   }
@@ -573,6 +636,7 @@ async function main() {
     removeSessions,
     menuSessions: sessionsMenu,
     leave: () => tabs.current()?.focus(),
+    newFolder: (parentId) => newFolder(parentId),
   });
   tabs = new TabManager($("tabbar"), $("tabviews"), $("tabtools"), settings, onTabsChanged, showShortcuts, saveTabAsSession);
   $("btn-shortcuts").addEventListener("click", showShortcuts);

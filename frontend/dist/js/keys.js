@@ -23,6 +23,7 @@ const ALT = {
   u: "firmware",
   a: "tasks",
   j: "snippets",
+  n: "newfolder",
 };
 
 // Font size: Alt+Plus / Alt+Minus, Alt+= (Shift+0 on German keyboards) resets.

@@ -39,10 +39,7 @@ func (a *App) defaultConfigDir() string {
 
 // ConfigDir returns the folder for running-config backups and creates it.
 func (a *App) ConfigDir() (string, error) {
-	dir := a.GetSettings().ConfigDir
-	if dir == "" {
-		dir = a.defaultConfigDir()
-	}
+	dir := a.GetSettings().ConfigDir // resolved, never ""
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("Config-Ordner %s: %w", dir, err)
 	}
@@ -59,7 +56,7 @@ func (a *App) PickConfigDir() (string, error) {
 		return cur, err
 	}
 	if _, err := a.updateSettings(func(s store.Settings) (store.Settings, error) {
-		s.ConfigDir = dir
+		s.ConfigDir = storeDir(a.dir, a.portable, dir, a.defaultConfigDir())
 		return s, nil
 	}); err != nil {
 		return cur, err
@@ -222,7 +219,11 @@ func (a *App) RunSnippetToFile(tabID, name, text string) ([]string, error) {
 	if len(res.Steps) == 0 && res.Error != "" {
 		return nil, errors.New("Schnipsel nicht ausgeführt: " + res.Error)
 	}
-	return writeOutputs(dir, meta.title, name, at, res, a.GetSettings().OutputSplit)
+	out := filepath.Join(dir, outputSubdir)
+	if err := os.MkdirAll(out, 0o700); err != nil {
+		return nil, err
+	}
+	return writeOutputs(out, meta.title, name, at, res, a.GetSettings().OutputSplit)
 }
 
 // writeOutputs writes the report as one file, or split into one file per

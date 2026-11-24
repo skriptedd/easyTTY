@@ -318,8 +318,17 @@ export class SessionTree {
     this.paintMarks();
   }
 
+  /** Where a new folder goes: into the selected folder, else beside the selected session. */
+  folderForNew() {
+    const sel = this.selected;
+    if (sel?.type === "folder" && this.folder(sel.id)) return sel.id;
+    if (sel?.type === "session") return this.session(sel.id)?.folderId || "";
+    return "";
+  }
+
   onKey(e) {
     if (e.key === "Escape") { e.preventDefault(); this.handlers.leave?.(); return; }
+    if (e.key === "F7") { e.preventDefault(); this.handlers.newFolder?.(this.folderForNew()); return; }
     const sel = this.selected;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); this.moveSelection(e.key === "ArrowDown" ? 1 : -1); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") { e.preventDefault(); this.markAll(); return; }

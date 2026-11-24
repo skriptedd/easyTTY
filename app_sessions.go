@@ -177,10 +177,7 @@ func (a *App) GetSettings() store.Settings {
 		// would e.g. switch logging back on.
 		s = *last
 	}
-	if s.LogDir == "" {
-		s.LogDir = a.defaultLogDir()
-	}
-	return s
+	return a.withDirs(s)
 }
 
 // SaveSettings persists the global preferences.
@@ -189,12 +186,10 @@ func (a *App) SaveSettings(s store.Settings) (store.Settings, error) {
 		if s.McpToken == "" { // the UI never needs to send the token back
 			s.McpToken = cur.McpToken
 		}
-		return s, nil
+		return a.storableDirs(s), nil
 	})
-	if err == nil && saved.LogDir == "" {
-		saved.LogDir = a.defaultLogDir()
-	}
 	if err == nil {
+		saved = a.withDirs(saved)
 		a.applyMCP()
 		if h := a.runningRDP(); h != nil {
 			h.SetAppKeys(saved.AltShortcuts)

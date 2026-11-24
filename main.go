@@ -28,15 +28,23 @@ func main() {
 	if dir, ok := portableDir(); ok {
 		webviewData = webviewDir(dir)
 	}
+	startState := options.Normal
+	if dir, _, err := dataDir(); err == nil {
+		if s, ok := loadWindowState(dir); ok && s.Max {
+			startState = options.Maximised // no jump from a centred window
+		}
+	}
 	err := wails.Run(&options.App{
 		Title:            "easyTTY",
 		Width:            1400,
 		Height:           880,
+		WindowStartState: startState,
 		MinWidth:         860,
 		MinHeight:        520,
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: &options.RGBA{R: 13, G: 15, B: 20, A: 255},
 		OnStartup:        app.startup,
+		OnDomReady:       app.domReady,
 		OnBeforeClose:    app.beforeClose,
 		OnShutdown:       app.shutdown,
 		Bind:             []interface{}{app},

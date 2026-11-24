@@ -4,6 +4,7 @@ import { closeX, contextMenu, h, makeSplitter, modal, toast } from "./ui.js";
 import { keyAction } from "./keys.js";
 import { editPaste } from "./pasteDialog.js";
 import { openConfigDiff } from "./configDiff.js";
+import { openFile, showFiles } from "./files.js";
 import { HOLD_LIMIT_MS, HOLD_MS, Highlighter } from "./highlight.js";
 import { SftpPanel } from "./sftp.js";
 import { showSSHInfo } from "./sshInfo.js";
@@ -292,16 +293,17 @@ export class Tab {
       { label: "Running-Config sichern", disabled: this.state !== "connected" || this.pasting, action: () => this.saveRunningConfig() },
       { label: "Configs vergleichen…", action: () => openConfigDiff() },
       "-",
-      { label: "Log dieser Sitzung zeigen", hint: "Alt+L", disabled: !this.logPath, action: () => this.revealLog() },
+      { label: "Log dieser Sitzung öffnen", disabled: !this.logPath, action: () => openFile(this.logPath) },
+      { label: "Logs & Dateien…", hint: "Alt+L", action: () => this.revealLog() },
       { label: "Einfüge-Bericht (letztes Einfügen)", disabled: !this.lastPaste, action: () => this.showPasteReport() },
-      { label: "Log-Ordner öffnen", action: () => api.OpenLogDir().catch((e) => toast(errMsg(e), "err")) },
       "-",
       { label: "Schließen", hint: "Alt+W", danger: true, action: () => this.mgr.close(this.id) },
     ]);
   }
 
+  /** The file list with this session's log under the cursor. */
   revealLog() {
-    if (this.logPath) api.RevealLog(this.logPath).catch((e) => toast(errMsg(e), "err"));
+    showFiles({ select: this.logPath });
   }
 
   /** A quick-connect tab becomes a saved session (title, colour, reconnect use it). */
@@ -480,6 +482,7 @@ export class Tab {
       toast(`${done}: ${what}`, "ok", 15000, [
         { label: "Öffnen", action: openAll },
         { label: "Im Ordner zeigen", action: () => api.RevealLocal(path).catch(fail) },
+        { label: "In der Liste", action: () => showFiles({ select: path }) },
         ...(paths.length === 1 ? [{ label: "Vergleichen", action: () => openConfigDiff(path) }] : []),
       ]);
     } catch (e) { toast(errMsg(e), "err", 9000); }

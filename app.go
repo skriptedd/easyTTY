@@ -59,6 +59,7 @@ type App struct {
 	settingsMu   sync.Mutex                     // one read-modify-write of settings.json at a time
 	lastSettings atomic.Pointer[store.Settings] // last readable settings.json, used while it is locked
 	updating     atomic.Bool
+	placed       sync.Once // window place restored (first DOM ready only)
 
 	// MCP (AI access): endpoint, open tabs it may see, approval gate.
 	gate     *approval.Gate
@@ -69,6 +70,7 @@ type App struct {
 	tabMeta  map[string]tabMeta
 	mcpRuns  chan struct{}     // limits concurrent run_commands
 	aiTabs   map[string]string // tabId -> run key while automation types into it
+	logFiles map[string]bool   // session logs written this run (FileList, OpenFile)
 }
 
 type promptAnswer struct {
@@ -140,7 +142,23 @@ func (a *App) fatal(err error) {
 	runtime.Quit(a.ctx)
 }
 
+// domReady puts the window back where it was and makes sure it can be seen.
+func (a *App) domReady(context.Context) {
+	a.placed.Do(func() {
+		s, ok := loadWindowState(a.dir)
+		placeWindow(s, ok)
+	})
+}
+
+// rememberWindow saves the window place for the next start.
+func (a *App) rememberWindow() {
+	if s, ok := captureWindow(); ok && a.dir != "" {
+		_ = saveWindowState(a.dir, s)
+	}
+}
+
 func (a *App) beforeClose(ctx context.Context) bool {
+	a.rememberWindow()
 	open := 0
 	if a.terms != nil {
 		open = a.terms.Count()
@@ -166,6 +184,7 @@ func (a *App) beforeClose(ctx context.Context) bool {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.rememberWindow() // a quit without closing the window (update restart) skips beforeClose
 	a.mu.Lock()
 	for _, d := range a.dials {
 		d.cancel()

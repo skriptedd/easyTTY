@@ -25,14 +25,16 @@ func TestWriteAtomicWithConcurrentReader(t *testing.T) {
 		}
 	}()
 	writeFails := 0
+	var lastErr error
 	for range 300 {
 		if err := WriteAtomic(p, []byte(`{"a":2}`)); err != nil {
 			writeFails++
+			lastErr = err
 		}
 	}
 	stop.Store(true)
 	<-done
 	if writeFails > 0 || readFails.Load() > 0 {
-		t.Fatalf("writes failed %d times, reads %d times", writeFails, readFails.Load())
+		t.Fatalf("writes failed %d times (last: %v), reads %d times", writeFails, lastErr, readFails.Load())
 	}
 }

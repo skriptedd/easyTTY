@@ -60,21 +60,25 @@ const (
 
 // renameRetry renames, retrying while Windows refuses because someone has
 // the target open (another read of the file, a virus scanner, a sync tool).
+// Replacing our own file, "access denied" means exactly that, so it gets as
+// long as a sharing violation.
 func renameRetry(from, to string) error {
-	return retry(func() error { return os.Rename(from, to) })
+	return retry(retrySharing, func() error { return os.Rename(from, to) })
 }
 
 // ReadFile reads a file, retrying while it is briefly locked (see renameRetry).
 func ReadFile(path string) ([]byte, error) {
 	var b []byte
-	err := retry(func() (err error) {
+	err := retry(retryPermission, func() (err error) {
 		b, err = os.ReadFile(path)
 		return err
 	})
 	return b, err
 }
 
-func retry(op func() error) error {
+// retry runs op until it works, fails for good, or the time is up:
+// retrySharing for a sharing violation, denied for "access denied".
+func retry(denied time.Duration, op func() error) error {
 	start := time.Now()
 	wait := retryFirst
 	for {
@@ -84,7 +88,7 @@ func retry(op func() error) error {
 		}
 		limit := retrySharing
 		if !errors.Is(err, errSharingViolation) {
-			limit = retryPermission
+			limit = denied
 		}
 		if time.Since(start) > limit {
 			return err

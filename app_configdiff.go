@@ -51,13 +51,20 @@ func (a *App) ConfigFiles() ([]ConfigFile, error) {
 		return nil, err
 	}
 	out := []ConfigFile{}
-	for _, e := range entries {
-		info, err := e.Info()
-		if err != nil || !info.Mode().IsRegular() || strings.HasPrefix(e.Name(), ".") {
-			continue
+	add := func(folder string, entries []os.DirEntry) {
+		for _, e := range entries {
+			info, err := e.Info()
+			if err != nil || !info.Mode().IsRegular() || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			out = append(out, ConfigFile{Name: e.Name(), Path: filepath.Join(folder, e.Name()), Size: info.Size(),
+				ModTime: info.ModTime().UnixMilli(), Device: configDevice(e.Name())})
 		}
-		out = append(out, ConfigFile{Name: e.Name(), Path: filepath.Join(dir, e.Name()), Size: info.Size(),
-			ModTime: info.ModTime().UnixMilli(), Device: configDevice(e.Name())})
+	}
+	add(dir, entries)
+	// Snippet output ("show ip int brief" before and after) can be compared too.
+	if more, err := os.ReadDir(filepath.Join(dir, outputSubdir)); err == nil {
+		add(filepath.Join(dir, outputSubdir), more)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ModTime > out[j].ModTime })
 	if len(out) > maxConfigFiles {

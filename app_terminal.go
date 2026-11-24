@@ -77,6 +77,7 @@ func (a *App) startDial(tabID string, s store.Session, cols, rows int) {
 			return
 		}
 		log, logPath := a.openLog(s)
+		a.rememberLog(logPath)
 		a.terms.Attach(tabID, c, log)
 		if logPath != "" {
 			a.emit("term:log", map[string]string{"id": tabID, "path": logPath})
@@ -94,6 +95,11 @@ func (a *App) startDial(tabID string, s store.Session, cols, rows int) {
 				// A console only prints its prompt after a keystroke; send one Enter.
 				_ = a.terms.Write(tabID, []byte("\r"))
 			}
+		} else if s.Protocol == store.ProtocolSSH && a.GetSettings().SSHWake {
+			// Some devices (consoles behind a terminal server, "Press RETURN")
+			// stay silent after the login until a key comes.
+			time.Sleep(serialWakeDelay)
+			_ = a.terms.Write(tabID, []byte("\r"))
 		}
 	}()
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -281,3 +282,15 @@ func (a *App) startJob(tabID string, run func(context.Context, transfer.Progress
 }
 
 func (a *App) reportProgress(p transfer.Progress) { a.emit("sftp:progress", p) }
+
+// LocalMkdir creates a folder named name inside dir on this PC.
+func (a *App) LocalMkdir(dir, name string) error {
+	name = strings.TrimSpace(name)
+	if dir == "" {
+		return errors.New("Erst einen Ordner öffnen, dann darin einen neuen anlegen")
+	}
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `\/:*?"<>|`) {
+		return errors.New(`Ungültiger Ordnername (nicht erlaubt: \ / : * ? " < > |)`)
+	}
+	return os.Mkdir(filepath.Join(dir, name), 0o700)
+}

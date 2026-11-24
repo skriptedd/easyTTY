@@ -213,12 +213,44 @@ kbd {
 .update-bar.on { visibility: visible; }
 .update-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 .welcome-hint { margin-top: 18px; font-size: 12px; }
-.shortcut-groups { columns: 2 280px; column-gap: 28px; }
-.shortcut-group { break-inside: avoid; margin-bottom: 14px; }
-.shortcut-title { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 6px; }
-.shortcut-row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: baseline; padding: 3px 0; font-size: 12.5px; }
-.shortcut-keys { color: var(--muted); }
-.shortcut-keys kbd { white-space: nowrap; }
+.shortcuts-dialog { display: flex; flex-direction: column; gap: 14px; }
+.shortcut-search, .files-search { width: 100%; font-size: 14px; padding: 8px 10px; }
+.shortcut-groups { columns: 2 340px; column-gap: 32px; }
+.shortcut-group { break-inside: avoid; margin: 0 0 18px; }
+.shortcut-title { margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 600; letter-spacing: .4px; color: var(--accent); }
+.shortcut-row { display: grid; grid-template-columns: 168px 1fr; gap: 12px; align-items: center; padding: 5px 6px; border-radius: 5px; font-size: 13px; line-height: 1.35; }
+.shortcut-row:nth-child(even) { background: var(--bg-3); }
+.shortcut-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+.shortcut-keys kbd { white-space: nowrap; font-size: 12px; color: var(--text); padding: 1px 7px; }
+.shortcut-keys .plus { color: var(--muted); font-size: 11px; }
+.shortcut-label { color: var(--text); }
+.shortcut-none { margin: 0; }
+.shortcut-row[hidden], .shortcut-group[hidden], .shortcut-none[hidden] { display: none; }
+.modal.wide:has(.shortcuts-dialog), .modal.wide:has(.files-dialog) { width: min(980px, calc(100vw - 32px)); }
+
+/* Logs & Dateien */
+.files-dialog { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.files-bar { display: flex; gap: 10px; align-items: center; }
+.files-bar .files-search { flex: 1; }
+.files-kinds { display: flex; gap: 4px; flex: none; }
+.files-kinds .btn.active { background: var(--sel); border-color: var(--accent); color: var(--text); }
+.files-list { height: min(56vh, 520px); overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-2); }
+.files-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); cursor: default; }
+.files-row:hover { background: var(--bg-3); }
+.files-row.cursor { background: var(--sel); box-shadow: inset 3px 0 0 var(--accent); }
+.files-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.files-name { font: 12.5px var(--mono); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-meta { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-badge { margin-left: 8px; padding: 0 6px; border-radius: 8px; background: var(--accent); color: var(--bg); font: 600 10.5px var(--ui); vertical-align: 1px; }
+.files-actions { display: flex; gap: 4px; flex: none; opacity: .55; }
+.files-row:hover .files-actions, .files-row.cursor .files-actions { opacity: 1; }
+.files-empty { padding: 16px; margin: 0; }
+.files-foot { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+
+/* Drag & drop into the workspace: the part a drop would fill. */
+.drop-hint { position: absolute; z-index: 30; pointer-events: none; display: flex; align-items: center; justify-content: center; margin: 6px; border: 2px dashed var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 14%, transparent); transition: left .12s, right .12s, top .12s, bottom .12s; }
+.drop-hint[hidden] { display: none; }
+.drop-hint span { padding: 6px 14px; border-radius: 14px; background: var(--accent); color: var(--bg); font-weight: 600; font-size: 13px; box-shadow: var(--shadow); }
 .tabbar::-webkit-scrollbar { height: 0; }
 .tab {
   display: flex;

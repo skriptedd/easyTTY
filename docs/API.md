@@ -36,6 +36,8 @@ MCP-Werkzeug hier steht.
 | `AnswerPrompt` | `id: string, ok: bool, values: string[]` | – | Antwort auf `prompt` |
 | `RevealLog` | `path: string` | `error` | Explorer markiert die Datei |
 | `OpenLogDir` | – | `error` | Legt den Ordner bei Bedarf an |
+| `FileList` | – | `ListedFile[], error` | Logs, Configs und Schnipsel-Ausgaben, neueste zuerst, höchstens 3000 (Liste „Logs & Dateien“, Alt+L) |
+| `OpenFile` | `path: string` | `error` | Öffnet eine Datei mit dem Standardprogramm; nur im Log- oder Config-Ordner oder ein Log dieses Laufs, und nur Textdateien (`.log .txt .cfg .conf .json .csv .diff`) |
 
 ### Sessions und Ordner
 
@@ -101,6 +103,7 @@ MCP-Werkzeug hier steht.
 | `LocalList` | `dir: string` | `transfer.Listing, error` | `""` = Laufwerke |
 | `LocalParent` | `dir: string` | `string` | `""` über einem Laufwerk |
 | `LocalHome` | – | `string` | Letzter Download-Ordner |
+| `LocalMkdir` | `dir, name: string` | `error` | Neuer Ordner auf diesem PC (Name ohne `\ / : * ? " < > \|`) |
 | `RevealLocal` | `path: string` | `error` | |
 
 ### RDP
@@ -152,8 +155,8 @@ MCP-Werkzeug hier steht.
 | `ConfigDir` | – | `string, error` | Config-Ordner (Einstellung `configDir`, sonst `Dokumente\easyTTY\Configs`), wird angelegt |
 | `PickConfigDir` | – | `string, error` | Ordnerdialog, speichert die Wahl in den Einstellungen |
 | `OpenConfigDir` | – | `error` | Explorer |
-| `RunSnippetToFile` | `tabID, name, text: string` | `string[], error` | Führt die Befehle im offenen Tab nacheinander aus und speichert Befehl und Ausgabe als `<Tab>_<Name>_<Datum>_<Zeit>.txt` im Config-Ordner. Mit `outputSplit` eine Datei pro Befehl (`<Tab>_<Befehl>_…`). Ergebnis: Pfade |
-| `ConfigFiles` | – | `ConfigFile[], error` | Dateien im Config-Ordner, neueste zuerst, höchstens 500: `{name, path, size, modTime, device}` |
+| `RunSnippetToFile` | `tabID, name, text: string` | `string[], error` | Führt die Befehle im offenen Tab nacheinander aus und speichert Befehl und Ausgabe als `<Tab>_<Name>_<Datum>_<Zeit>.txt` im Unterordner `Ausgaben` des Config-Ordners. Mit `outputSplit` eine Datei pro Befehl (`<Tab>_<Befehl>_…`). Ergebnis: Pfade |
+| `ConfigFiles` | – | `ConfigFile[], error` | Dateien im Config-Ordner und in `Ausgaben`, neueste zuerst, höchstens 500: `{name, path, size, modTime, device}` |
 | `DiffConfigs` | `oldPath, newPath: string, ignoreVolatile: bool` | `{lines[{kind (" "/"-"/"+"), text, oldNo?, newNo?}], removed, added}, error` | Zeilenvergleich zweier Dateien im Config-Ordner (je höchstens 5 MB). `ignoreVolatile` lässt Zeitstempel-Zeilen weg |
 | `DefaultHighlights` | – | `store.Highlight[]` | Standard-Hervorhebungen (IP, MAC, Fehler, OK) |
 | `OpenConfigFile` | `path: string` | `error` | Öffnet eine gesicherte Config mit dem Standardprogramm; nur Dateien im Config-Ordner |
@@ -185,6 +188,7 @@ MCP-Werkzeug hier steht.
 | `transfer.Listing` | `path, entries: Entry[]` |
 | `transfer.Entry` | `name, path, size, mode, modTime, isDir, isLink` |
 | `transfer.FindResult` | `dir, entries: Entry[], dirs, skipped, stopped` |
+| `ListedFile` | `path, name, folder` (relativ zum Log- bzw. Config-Ordner), `kind` (`log`, `config`, `output`), `size`, `time` (Unix-ms) |
 | `rdpview.Rect` | `x, y, w, h` |
 | `status.Snapshot` | `kind (linux/cisco), host, os, uptimeSec, uptime, load[], cpus, cpu[], memTotal, memUsed, swapTotal, swapUsed, cpuUsage, disks[{mount,total,used}], procs[{pid,name,cpu,mem}], taken` |
 | `automation.Task` | `id, name, sessionIds[], commands, schedule, enabled, device (auto/cisco/other), stopOnError, autoConfirm, idleTimeout, createdBy?, modifiedBy?, created, updated` |
@@ -212,13 +216,14 @@ MCP-Werkzeug hier steht.
 | `scrollback` | `20000` | 0 bis 1.000.000 |
 | `copyOnSelect`, `rightClickPaste`, `cursorBlink`, `confirmClose` | `true` | |
 | `logEnabled` | `true` | |
-| `logDir` | `""` | `""` = Standardordner |
+| `logDir`, `configDir` | `""` | `""` = Standardordner. Portabel steht ein Ordner im Datenordner relativ zu ihm, damit er mit umzieht; ein absoluter Pfad in einen alten `easyTTY-data`-Ordner wird auf den aktuellen umgebogen |
 | `logRaw`, `firstRunDone` | `false` | |
 | `pasteConfirm` | `true` | |
 | `pasteLineDelay` | `0` | 0 bis 2000 ms |
 | `nameCase` | `""` | `lower`, `upper`, `capitalize`, `title` |
 | `nameSpaces` | `""` | `_`, `-` |
 | `serialWake`, `altShortcuts` | `true` | |
+| `sshWake` | `false` | Nach dem SSH-Login einmal Enter senden |
 | `mcpEnabled`, `mcpShowAuto`, `mcpReadTabs` | `false` | |
 | `mcpPort` | `47321` | 1024 bis 65535 |
 | `mcpToken` | `""` | Wird beim ersten Einschalten erzeugt, liegt im Klartext |
@@ -300,6 +305,7 @@ Datenordner: installiert `%APPDATA%\easyTTY\`, portabel `<Exe-Ordner>\easyTTY-da
 | `sessions.json.bak`, `.damaged` | Datenordner | Letzter guter Stand; beschädigte Datei nach Rücksprung auf `.bak` |
 | `settings.json` (+ `.bak`, `.damaged`) | Datenordner | `store.Settings`, `mcpToken` im Klartext |
 | `known_hosts` (+ `.bak`) | Datenordner | OpenSSH-Format |
+| `window.json` | Datenordner | `{x, y, w, h, max}`: letzte Fensterlage in Bildschirmpixeln. Liegt sie auf keinem Bildschirm mehr, wird das Fenster mittig gezeigt |
 | `crash.log` (+ `.old`) | Datenordner | Startzeilen und Stacktrace bei Abstürzen, bleibt lokal |
 | `automation/tasks.json` (+ `.bak`, `.damaged`) | Datenordner | Array aus `automation.Task` |
 | `automation/runs/<runId>.json` | Datenordner | `automation.Run` mit Ausgabe. 50 pro Aufgabe, 200 ohne Aufgabe |

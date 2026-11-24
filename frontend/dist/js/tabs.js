@@ -186,6 +186,22 @@ export class TabManager {
     return true;
   }
 
+  /**
+   * Shows tab next to anchor (a tab on its own): side left/right gives two
+   * windows side by side, top/bottom one above the other (drag & drop onto
+   * an edge of the view).
+   */
+  splitWith(tab, anchor, side) {
+    if (!anchor || anchor === tab || anchor.groupId) return false;
+    this.leaveGroup(tab);
+    const first = side === "left" || side === "top";
+    const g = { id: "v" + Date.now().toString(36), name: "Ansicht", template: side === "top" || side === "bottom" ? "2h" : "2v", slots: [], empties: [], zoomed: false, adhoc: true };
+    this.groups.set(g.id, g);
+    g.slots = first ? [tab.id, anchor.id] : [anchor.id, tab.id];
+    g.slots.forEach((id, i) => this.byId(id).setGroup(g.id, i));
+    return true;
+  }
+
   /** Moves an open tab into a tile of view gid (drag & drop). */
   moveToSlot(tab, gid, slot) {
     const g = this.groups.get(gid);
@@ -495,8 +511,8 @@ export class TabManager {
       btn("📊", "Status", "Server-Status der Gegenstelle: Last, RAM, Platte, Prozesse (Alt+I)", () => this.statusPanel?.toggle(), { on: !!this.statusPanel?.open }),
       btn("⚡", "Schnipsel", "Befehls-Schnipsel in diesen Tab tippen (Alt+J)", (e) => this.onSnippets?.(e.currentTarget)),
       btn("🔍", "Suchen", "Im Terminal suchen (Alt+G)", () => t.openSearch()),
-      btn("📄", "Log", t.logPath ? `Log dieser Sitzung zeigen\n${t.logPath}` : "Diese Sitzung wird nicht protokolliert",
-        () => t.revealLog(), { disabled: !t.logPath }),
+      btn("📄", "Log", t.logPath ? `Logs & Dateien (Alt+L), dieses Log ist markiert\n${t.logPath}` : "Logs & Dateien (Alt+L)\nDiese Sitzung wird nicht protokolliert",
+        () => t.revealLog()),
       btn("⌨", "Kürzel", "Alle Tastenkürzel (Alt+K)", () => this.onHelp?.()),
     );
   }
@@ -509,7 +525,7 @@ export class TabManager {
     const states = { connected: "verbunden", connecting: "verbinde…", queued: "wartet auf vorige Anmeldung", closed: "getrennt", error: "Fehler", new: "" };
     const logging = t.logPath && t.state === "connected";
     left.replaceChildren(
-      logging ? h("span", { class: "rec", title: `Wird protokolliert: ${t.logPath}\n(Klick zeigt die Datei)`, onclick: () => t.revealLog() }, "● LOG") : "",
+      logging ? h("span", { class: "rec", title: `Wird protokolliert: ${t.logPath}\n(Klick: in Logs & Dateien zeigen)`, onclick: () => t.revealLog() }, "● LOG") : "",
       `${t.subtitle()} · ${states[t.state] || t.state}`);
     const size = t.term ? `${t.term.cols}×${t.term.rows} · ` : "";
     right.textContent = `${size}${this.tabs.length} Tab${this.tabs.length === 1 ? "" : "s"}`;
@@ -536,6 +552,7 @@ export class TabManager {
       const tab = this.tabs.find((t) => t.tabEl === dragging);
       // A layout block only moves along the bar; a single tab can also go into a view.
       e.dataTransfer.setData(tab ? TAB_DRAG : "text/plain", tab ? tab.id : "");
+      this.draggedTab = tab || null; // drag data cannot be read before the drop
       dragging.classList.add("dragging");
     });
     this.tabbarEl.addEventListener("dragover", (e) => {
@@ -550,6 +567,7 @@ export class TabManager {
       if (!dragging) return;
       dragging.classList.remove("dragging");
       this.reordering = false;
+      this.draggedTab = null;
       const order = [...this.tabbarEl.querySelectorAll(".tab:not(.tab-block)")];
       this.tabs.sort((a, b) => order.indexOf(a.tabEl) - order.indexOf(b.tabEl));
       dragging = null;

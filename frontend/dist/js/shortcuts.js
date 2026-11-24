@@ -1,76 +1,124 @@
-// All keyboard shortcuts in one place: shown in the help dialog (Alt+K).
-// Every app shortcut is Alt+key (Super belongs to Windows, so Alt it is;
-// itself); Strg combos belong to the terminal.
+// All keyboard shortcuts in one place: shown in the help dialog (Alt+K),
+// with a search box. Every app shortcut is Alt+key (Super belongs to
+// Windows); Strg combos belong to the terminal.
 import { h, modal } from "./ui.js";
 
 export const SHORTCUTS = [
-  ["Alles mit Alt", [
-    [["Alt", "Enter"], "neue Verbindung (Quick Connect, auch Alt+T)"],
-    [["Alt", "W"], "Tab / Fenster schließen"],
-    [["Alt", "F"], "Fenster im Layout groß / wieder Raster"],
-    [["Alt", "← → ↑ ↓"], "Nachbarfenster im Layout · sonst Tab links/rechts"],
+  ["Allgemein", [
+    [["Alt", "Enter"], "Neue Verbindung (Quick Connect, auch Alt+T)"],
+    [["Alt", "W"], "Tab oder Fenster schließen"],
     [["Alt", "1 … 9"], "Tab oder Layout 1 bis 9"],
+    [["Strg", "Tab"], "Nächster Tab, mit Shift der vorherige (Alt+Tab gehört Windows)"],
     [["Alt", "S"], "Seitenleiste ein/aus"],
+    [["Alt", "L"], "Logs & Dateien: Logs, Configs, Schnipsel-Ausgaben suchen und öffnen"],
+    [["Alt", "N"], "Neuer Ordner (im SFTP dort, sonst im Session-Baum)"],
     [["Alt", "U"], "Firmware-Server (Images per TFTP/HTTP/SCP an Switche)"],
-    [["Alt", "A"], "Aufgaben & Zeitpläne (Befehle auf Geräten ausführen)"],
-    [["Alt", "K"], "diese Übersicht"],
+    [["Alt", "A"], "Aufgaben und Zeitpläne (Befehle auf Geräten ausführen)"],
+    [["Alt", "K"], "Diese Übersicht"],
   ]],
   ["Springen", [
-    [["Alt", "E"], "in den Session-Baum (nochmal: zurück ins Terminal)"],
-    [["Alt", "B"], "SFTP öffnen → hineinspringen → schließen"],
-    [["Tab"], "im SFTP: Server ↔ Dieser PC"],
-    [["Esc"], "aus Baum oder SFTP zurück ins Terminal"],
-    [["Alt", "0"], "von überall ins Terminal"],
+    [["Alt", "E"], "In den Session-Baum, nochmal: zurück ins Terminal"],
+    [["Alt", "B"], "SFTP öffnen, hineinspringen, schließen"],
+    [["Alt", "0"], "Von überall ins Terminal"],
+    [["Esc"], "Aus Baum oder SFTP zurück ins Terminal"],
   ]],
   ["Terminal", [
-    [["Alt", "I"], "Server-Status (Last, RAM, Prozesse) ein/aus"],
-    [["Alt", "G"], "im Terminal suchen"],
-    [["Alt", "J"], "Befehls-Schnipsel (dann 1 … 9 oder Pfeile und Enter)"],
-    [["Alt", "C"], "kopieren (Markieren kopiert auch automatisch)"],
-    [["Alt", "V"], "einfügen (auch Rechtsklick)"],
+    [["Alt", "C"], "Kopieren (Markieren kopiert auch automatisch)"],
+    [["Alt", "V"], "Einfügen (auch Rechtsklick)"],
+    [["Alt", "G"], "Im Terminal suchen"],
+    [["Alt", "J"], "Befehls-Schnipsel, dann 1 … 9 oder Pfeile und Enter"],
     [["Alt", "D"], "Tab duplizieren"],
-    [["Alt", "L"], "Log dieser Sitzung zeigen"],
-    [["Esc"], "laufendes Einfügen abbrechen"],
-    [["Alt", "+ / −"], "Schrift größer / kleiner, Alt+= normal (auch Strg+Mausrad)"],
+    [["Alt", "I"], "Server-Status (Last, RAM, Prozesse) ein/aus"],
+    [["Alt", "+"], "Schrift größer (Alt+− kleiner, Alt+= normal, auch Strg+Mausrad)"],
+    [["Esc"], "Laufendes Einfügen abbrechen"],
   ]],
-  ["Baum & Fenster-Layout", [
-    [["▶ ▦"], "am Ordner: alle Sessions in ihren Fenstern öffnen"],
-    [["Ziehen"], "Session oder Tab in die Ansicht ziehen: ein Fenster mehr (1 → 2 → 3 → 4 → 6)"],
-    [["Enter"], "Session verbinden · im getrennten Tab: neu verbinden"],
-    [["Shift", "Enter"], "im Baum: Session ins offene Layout, der Fokus bleibt im Baum"],
-    [["Strg", "Enter"], "im Baum: als neuen Block starten, markierte zusammen"],
-    [["Leertaste"], "im Baum: Session markieren"],
-    [["F2"], "Session bearbeiten"],
-    [["Entf"], "Session/Ordner löschen (Ordner: fragt, ob die Sessions mit gehen)"],
-    [["Strg", "Klick"], "mehrere Sessions markieren (Shift+Klick: Bereich, Strg+A: alle)"],
-    [["Strg", "Enter"], "im Quick Connect: als Session speichern"],
+  ["Fenster-Layout", [
+    [["Alt", "F"], "Fenster im Layout groß, nochmal: wieder Raster"],
+    [["Alt", "← → ↑ ↓"], "Nachbarfenster im Layout, sonst Tab links/rechts"],
+    [["Ziehen"], "Tab oder Session an einen Rand der Ansicht ziehen: daneben oder darunter öffnen"],
+    [["Ziehen"], "Auf ein Fenster im Layout: Plätze tauschen; auf „frei“: dort öffnen"],
+    [["▶ ▦"], "Am Ordner: alle Sessions in ihren Fenstern öffnen"],
+  ]],
+  ["Session-Baum", [
+    [["Enter"], "Session verbinden, im getrennten Tab: neu verbinden"],
+    [["Shift", "Enter"], "Session ins offene Layout, der Fokus bleibt im Baum"],
+    [["Strg", "Enter"], "Als neuen Block starten, markierte zusammen"],
+    [["Leertaste"], "Session markieren"],
+    [["Strg", "Klick"], "Mehrere markieren (Shift+Klick: Bereich, Strg+A: alle)"],
+    [["F2"], "Session bearbeiten, Ordner umbenennen"],
+    [["F7"], "Neuer Ordner (unter dem markierten Ordner)"],
+    [["Entf"], "Session oder Ordner löschen (fragt bei Ordnern, ob die Sessions mitgehen)"],
+    [["Strg", "Enter"], "Im Quick Connect: als Session speichern"],
   ]],
   ["SFTP-Browser", [
-    [["Enter"], "Ordner öffnen / Datei auf die andere Seite übertragen (auch Doppelklick)"],
-    [["Backspace"], "eine Ebene hoch"],
-    [["F2"], "umbenennen"],
-    [["Entf"], "löschen"],
-    [["F5"], "aktualisieren"],
-    [["Strg", "A"], "alles markieren"],
+    [["Enter"], "Ordner öffnen oder Datei auf die andere Seite übertragen (auch Doppelklick)"],
+    [["Tab"], "Zwischen Server und Dieser PC wechseln"],
+    [["Backspace"], "Eine Ebene hoch, aus der Suche zurück"],
+    [["Strg", "F"], "Filtern; Shift+Enter im Feld sucht in allen Unterordnern"],
+    [["F7"], "Neuer Ordner"],
+    [["F2"], "Umbenennen"],
+    [["Entf"], "Löschen"],
+    [["F5"], "Aktualisieren"],
+    [["Strg", "A"], "Alles markieren"],
   ]],
-  ["Ausnahme", [
-    [["Strg", "Tab"], "nächster / mit Shift vorheriger Tab (Alt+Tab gehört Windows)"],
-    [["Strg", "Shift", "Buchstabe"], "dieselben Kürzel, wenn die Alt-Kürzel in den Einstellungen aus sind"],
+  ["Ohne Alt-Kürzel", [
+    [["Strg", "Shift", "Buchstabe"], "Dieselben Kürzel, wenn die Alt-Kürzel in den Einstellungen aus sind"],
   ]],
 ];
 
-const keyCombo = (keys) => keys.flatMap((k, i) => [i ? "+" : null, h("kbd", {}, k)]);
+const keyCombo = (keys) => keys.flatMap((k, i) => [i ? h("span", { class: "plus" }, "+") : null, h("kbd", {}, k)]);
+
+// "log" searches the descriptions; "alt+l" or "strg f" (a modifier in the
+// query) looks for exactly these keys, so "l" does not hit every "l".
+const plain = (s) => s.toLowerCase().replace(/\s*\+\s*/g, " ");
+const words = (q) => plain(q).split(/\s+/).filter(Boolean).map((w) => (w === "ctrl" ? "strg" : w));
+const MODIFIERS = new Set(["alt", "strg", "shift"]);
+
+/** True if the row with these keys and this search text matches the query words. */
+function matches(q, keys, text) {
+  if (!q.some((w) => MODIFIERS.has(w))) return q.every((w) => text.includes(w));
+  const parts = keys.flatMap((k) => {
+    const range = /^(\d) … (\d)$/.exec(k); // "1 … 9" stands for every digit in it
+    if (range) return Array.from({ length: range[2] - range[1] + 1 }, (_, i) => String(+range[1] + i));
+    return k.toLowerCase().split(/\s+/);
+  });
+  return q.every((w) => parts.includes(w));
+}
 
 export function showShortcuts() {
+  const search = h("input", { type: "search", class: "shortcut-search", placeholder: "Suchen: Befehl oder Taste, z. B. „log“ oder „Alt L“", spellcheck: "false", autofocus: true });
+  const groups = SHORTCUTS.map(([title, rows]) => {
+    const els = rows.map(([keys, label]) => ({
+      keys,
+      text: plain(`${keys.join(" ")} ${label} ${title}`),
+      el: h("div", { class: "shortcut-row" },
+        h("span", { class: "shortcut-keys" }, keyCombo(keys)),
+        h("span", { class: "shortcut-label" }, label)),
+    }));
+    return { els, el: h("section", { class: "shortcut-group" }, h("h3", { class: "shortcut-title" }, title), els.map((r) => r.el)) };
+  });
+  const none = h("p", { class: "hint shortcut-none" }, "Kein Kürzel passt dazu.");
+  const filter = () => {
+    const q = words(search.value);
+    let shown = 0;
+    for (const g of groups) {
+      let any = false;
+      for (const r of g.els) {
+        const hit = matches(q, r.keys, r.text);
+        r.el.hidden = !hit;
+        any ||= hit;
+        if (hit) shown++;
+      }
+      g.el.hidden = !any;
+    }
+    none.hidden = shown > 0;
+  };
+  search.addEventListener("input", filter);
+  filter();
   return modal((close) => ({
     head: "Tastenkürzel",
     wide: true,
-    body: h("div", { class: "shortcut-groups" },
-      SHORTCUTS.map(([group, rows]) => h("div", { class: "shortcut-group" },
-        h("div", { class: "shortcut-title" }, group),
-        rows.map(([keys, label]) => h("div", { class: "shortcut-row" },
-          h("span", { class: "shortcut-keys" }, keyCombo(keys)),
-          h("span", {}, label)))))),
+    body: h("div", { class: "shortcuts-dialog" }, search, h("div", { class: "shortcut-groups" }, groups.map((g) => g.el)), none),
     foot: [h("button", { class: "btn primary", onclick: () => close() }, "Schließen")],
   }));
 }

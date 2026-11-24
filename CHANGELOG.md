@@ -1,5 +1,35 @@
 # Änderungen
 
+## 0.3.8 (2026-11-24)
+
+### Neu
+
+- „Logs & Dateien“ (Alt+L, 📄 in der Tab-Leiste): alle Session-Logs, gesicherten Configs und
+  Schnipsel-Ausgaben in einer Liste, neueste zuerst, mit Suche und Filter. Enter öffnet die
+  Datei, Shift+Enter zeigt sie im Explorer; das Log der aktuellen Sitzung ist markiert.
+- Nach einem Schnipsel mit „Ausgabe in Datei“ bietet die Meldung neben „Öffnen“ und
+  „Im Ordner zeigen“ auch „In der Liste“ an. Die Ausgaben liegen jetzt im Unterordner
+  `Ausgaben` des Config-Ordners und lassen sich weiterhin vergleichen.
+- Tastenkürzel (Alt+K) lassen sich durchsuchen, nach Beschreibung („log“) oder nach Taste
+  („Alt L“, „Strg F“), und sind größer und besser lesbar.
+- Neuer Ordner per Tastatur: Alt+N (im SFTP-Browser dort, sonst im Session-Baum), F7 im Baum
+  und in beiden SFTP-Listen. „Dieser PC“ im SFTP-Browser kann jetzt auch Ordner anlegen.
+- Tab oder Session in die Ansicht ziehen zeigt vorher, wo sie landet: an den linken, rechten,
+  oberen oder unteren Rand gezogen öffnet sie daneben bzw. darüber oder darunter.
+- Einstellung „Nach dem Anmelden per SSH automatisch Enter senden“ für Geräte, die ihren
+  Prompt erst nach einer Taste zeigen.
+- Das Fenster startet so, wie es geschlossen wurde: maximiert oder an seiner letzten Stelle.
+
+### Behoben
+
+- Portabel: Nach dem Verschieben oder Kopieren des Ordners legte easyTTY die Logs weiter am
+  alten Ort an. Log- und Config-Ordner im Datenordner werden jetzt relativ gespeichert, alte
+  Pfade auf den aktuellen Ordner umgebogen.
+- Das Fenster konnte unsichtbar starten: außerhalb des Bildschirms, größer als der Bildschirm
+  (Titelleiste nicht erreichbar) oder hinter anderen Fenstern. Es wird jetzt immer auf einen
+  Bildschirm gelegt und nach vorn geholt.
+- Speichern scheiterte noch selten mit „Zugriff verweigert“, wenn die Datei gerade gelesen wurde.
+
 ## 0.3.7 (2026-11-23)
 
 ### Behoben

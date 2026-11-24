@@ -365,6 +365,7 @@ class FilePane {
     const sel = this.selection();
     if (e.key === "Backspace") { e.preventDefault(); if (this.search) this.endSearch(); else this.up(); }
     else if (e.key === "F5") { e.preventDefault(); this.reload(); }
+    else if (e.key === "F7" && this.o.onNewFolder) { e.preventDefault(); this.o.onNewFolder(); }
     else if (e.key === "f" && e.ctrlKey) { e.preventDefault(); this.filterInput.focus(); this.filterInput.select(); }
     else if (e.key === "Escape" && (this.search || this.filterInput.value)) { e.preventDefault(); e.stopImmediatePropagation(); this.escape(); }
     else if (e.key === "Enter" && sel.length === 1) { e.preventDefault(); this.open(sel[0]); }
@@ -403,6 +404,7 @@ export class SftpPanel {
       home: () => "",
       onOpenFile: (e) => this.download([e.path]),
       onMenu: (x, y, e) => this.remoteMenu(x, y, e),
+      onNewFolder: () => this.mkdir(),
       onDropFiles: (d, dir) => this.upload(d.paths, dir),
       onKey: (e, sel) => {
         if (e.key === "Delete" && sel.length) { e.preventDefault(); this.remove(sel); }
@@ -411,7 +413,7 @@ export class SftpPanel {
       emptyText: "Leerer Ordner – Dateien von unten oder aus dem Explorer hierher ziehen.",
       headExtra: [btn("✕", "SFTP schließen (Alt+B)", () => this.tab.toggleSftp())],
       tools: [
-        btn("+ Ordner", "Neuen Ordner auf dem Server anlegen", () => this.mkdir()),
+        btn("+ Ordner", "Neuen Ordner auf dem Server anlegen (F7)", () => this.mkdir()),
         btn("⎘ cd", "Terminal in diesen Ordner wechseln", () => this.cdTerminal(this.cwd)),
         btn("⬆ Datei wählen…", "Dateien per Windows-Dialog hochladen", () => this.pickUpload(false)),
         btn("⬆ Ordner wählen…", "Ordner per Windows-Dialog hochladen", () => this.pickUpload(true)),
@@ -427,10 +429,12 @@ export class SftpPanel {
       home: () => api.LocalHome(),
       onOpenFile: (e) => this.upload([e.path]),
       onMenu: (x, y, e) => this.localMenu(x, y, e),
+      onNewFolder: () => this.mkdirLocal(),
       onDropFiles: (d, dir) => this.download(d.paths, dir),
       onChanged: (dir) => store.set(LOCAL_DIR_KEY, dir),
       emptyText: "Leerer Ordner.",
       headExtra: [btn("📂", "Diesen Ordner im Explorer öffnen", () => this.revealLocal(this.local.cwd))],
+      tools: [btn("+ Ordner", "Neuen Ordner auf diesem PC anlegen (F7)", () => this.mkdirLocal())],
     });
     this.transfers = h("div", { class: "transfers" });
     this.xferBar = h("div", { class: "xferbar" },
@@ -488,7 +492,7 @@ export class SftpPanel {
       items.push({ label: "Löschen", hint: "Entf", danger: true, action: () => this.remove(sel) });
       items.push("-");
     }
-    items.push({ label: "Neuer Ordner…", action: () => this.mkdir() });
+    items.push({ label: "Neuer Ordner…", hint: "F7", action: () => this.mkdir() });
     items.push({ label: "Aktualisieren", hint: "F5", action: () => pane.reload() });
     contextMenu(x, y, items);
   }
@@ -505,6 +509,7 @@ export class SftpPanel {
       items.push({ label: "Pfad kopieren", action: () => clipboard.set(sel.map((e) => e.path).join("\n")) });
       items.push("-");
     }
+    items.push({ label: "Neuer Ordner…", hint: "F7", disabled: !pane.cwd, action: () => this.mkdirLocal() });
     items.push({ label: "Aktualisieren", hint: "F5", action: () => pane.reload() });
     contextMenu(x, y, items);
   }
@@ -528,9 +533,22 @@ export class SftpPanel {
 
   async mkdir() {
     const name = await inputDialog({ title: "Neuer Ordner auf dem Server", label: "Name", ok: "Anlegen" });
-    if (!name) return;
-    try { await api.SftpMkdir(this.tab.id, this.cwd, name.trim()); await this.remote.reload(); }
+    if (!name?.trim()) return;
+    try { await api.SftpMkdir(this.tab.id, this.cwd, name.trim()); await this.remote.reload(); this.remote.list.focus(); }
     catch (e) { this.fail("Ordner anlegen", e); }
+  }
+
+  async mkdirLocal() {
+    if (!this.local.cwd) { toast("Erst einen Ordner öffnen, dann darin einen neuen anlegen.", "err"); return; }
+    const name = await inputDialog({ title: `Neuer Ordner in „${this.localName()}“`, label: "Name", ok: "Anlegen" });
+    if (!name?.trim()) return;
+    try { await api.LocalMkdir(this.local.cwd, name.trim()); await this.local.reload(); this.local.list.focus(); }
+    catch (e) { this.fail("Ordner anlegen", e); }
+  }
+
+  /** Alt+N: a new folder in the pane that has the keyboard (server if neither). */
+  mkdirHere() {
+    if (this.local.el.contains(document.activeElement)) this.mkdirLocal(); else this.mkdir();
   }
 
   async rename(entry) {

@@ -43,6 +43,9 @@ type Settings struct {
 
 	// SerialWake sends one Enter after a COM port opens, so a console shows its prompt.
 	SerialWake bool `json:"serialWake"`
+	// SSHWake sends one Enter after an SSH login, for devices that only show
+	// their prompt after a keystroke.
+	SSHWake bool `json:"sshWake,omitempty"`
 
 	// AltShortcuts enables the Alt+key layer (Omarchy style). Off = every Alt
 	// combo goes to the terminal (bash uses Alt+b/f/d for word movement).
