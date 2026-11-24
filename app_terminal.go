@@ -38,6 +38,35 @@ func (a *App) QuickConnect(tabID, target string, cols, rows int) (conn.Target, e
 	return t, nil
 }
 
+// OpenLocalShell starts an unsaved shell on this PC in tab tabID
+// (shell: powershell, pwsh or cmd; "" = PowerShell).
+func (a *App) OpenLocalShell(tabID, shell string, cols, rows int) error {
+	s := store.Session{Protocol: store.ProtocolLocal, Shell: shell}.Normalize()
+	if err := s.Validate(); err != nil {
+		return err
+	}
+	a.startDial(tabID, s, cols, rows)
+	return nil
+}
+
+// isLocalTab reports a shell on this PC (MCP and automation stay out): by
+// the mark set when it was opened, and by the connection itself, so a
+// reconnect in the same tab can never expose a shell that is still attached.
+func (a *App) isLocalTab(tabID string) bool {
+	a.mu.Lock()
+	marked := a.localTabs[tabID]
+	a.mu.Unlock()
+	if marked || a.terms == nil {
+		return marked
+	}
+	c, err := a.terms.Conn(tabID)
+	if err != nil {
+		return false
+	}
+	_, local := c.(*conn.LocalConn)
+	return local
+}
+
 // dial is one pending connection attempt; compared by pointer so a newer
 // attempt for the same tab is never cleaned up by an older one.
 type dial struct{ cancel context.CancelFunc }
@@ -50,6 +79,12 @@ func (a *App) startDial(tabID string, s store.Session, cols, rows int) {
 		prev.cancel()
 	}
 	a.dials[tabID] = d
+	// Marked before the shell exists, so no MCP call ever sees it unmarked.
+	if s.Protocol == store.ProtocolLocal {
+		a.localTabs[tabID] = true
+	} else {
+		delete(a.localTabs, tabID)
+	}
 	a.mu.Unlock()
 
 	a.emit(terminal.EventState, terminal.State{ID: tabID, State: "connecting", Message: describe(s)})
@@ -108,8 +143,11 @@ func (a *App) startDial(tabID string, s store.Session, cols, rows int) {
 const serialWakeDelay = 200 * time.Millisecond
 
 func describe(s store.Session) string {
-	if s.Protocol == store.ProtocolSerial {
+	switch s.Protocol {
+	case store.ProtocolSerial:
 		return s.SerialPort
+	case store.ProtocolLocal:
+		return conn.ShellName(s.Shell) + " auf diesem PC"
 	}
 	if s.User != "" {
 		return s.User + "@" + s.Host
@@ -123,6 +161,8 @@ func (a *App) open(ctx context.Context, tabID string, s store.Session, cols, row
 		return nil, errors.New("RDP-Sessions öffnen im Remotedesktop, nicht im Terminal")
 	case store.ProtocolSerial:
 		return conn.OpenSerial(conn.SerialConfig{Port: s.SerialPort, Baud: s.Baud, DataBits: s.DataBits, Parity: s.Parity, StopBits: s.StopBits})
+	case store.ProtocolLocal:
+		return conn.OpenLocal(conn.LocalConfig{Shell: s.Shell, Dir: s.StartDir, Home: a.home, Cols: cols, Rows: rows})
 	case store.ProtocolSSH:
 		pw := ""
 		if s.ID != "" {
@@ -181,8 +221,11 @@ func (a *App) openLog(s store.Session) (io.WriteCloser, string) {
 		pattern = filepath.Join(settings.LogDir, defaultLogPattern)
 	}
 	host, target := s.Host, fmt.Sprintf("%s:%d", describe(s), s.Port)
-	if s.Protocol == store.ProtocolSerial {
+	switch s.Protocol {
+	case store.ProtocolSerial:
 		host, target = s.SerialPort, fmt.Sprintf("%s @ %d Baud", s.SerialPort, s.Baud)
+	case store.ProtocolLocal:
+		host, target = "lokal", describe(s)
 	}
 	path := terminal.ExpandLogPath(pattern, s.Name, host, time.Now())
 	f, err := terminal.OpenLog(path)
@@ -238,6 +281,7 @@ func (a *App) CloseTab(tabID string) {
 		cancel()
 	}
 	delete(a.tabMeta, tabID)
+	delete(a.localTabs, tabID)
 	a.mu.Unlock()
 	_ = a.terms.Close(tabID)
 }

@@ -128,6 +128,14 @@ func TestShareableDropsOtherProtocolFields(t *testing.T) {
 	}
 }
 
+// A share file must not point a local shell at a folder of its choosing.
+func TestShareableDropsLocalStartDir(t *testing.T) {
+	s := shareable(Session{Name: "PS", Protocol: ProtocolLocal, Shell: "cmd", StartDir: `\\evil\share`})
+	if s.StartDir != "" || s.Shell != "cmd" {
+		t.Errorf("local: %+v", s)
+	}
+}
+
 func TestImportOwnKeepsUserAndKey(t *testing.T) {
 	st, _ := openTemp(t)
 	b := Bundle{

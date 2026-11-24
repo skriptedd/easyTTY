@@ -23,6 +23,7 @@ MCP-Werkzeug hier steht.
 |---|---|---|---|
 | `Connect` | `tabID, sessionID: string, cols, rows: int` | `error` | Ergebnis kommt als `term:state` |
 | `QuickConnect` | `tabID, target: string, cols, rows: int` | `conn.Target, error` | Liest `user@host:port`, speichert nichts |
+| `OpenLocalShell` | `tabID, shell: string, cols, rows: int` | `error` | Shell auf diesem PC in einer Windows-Pseudo-Konsole: `powershell` (Standard), `pwsh` oder `cmd`, Startordner ist das Benutzerverzeichnis. Speichert nichts. Lokale Tabs sind für KI-Zugriff und Aufgaben gesperrt |
 | `CloseTab` | `tabID: string` | – | Bricht Verbindungsaufbau und Einfügen ab |
 | `Write` | `tabID, data: string` | `error` | Tastatureingabe |
 | `Resize` | `tabID: string, cols, rows: int` | `error` | |
@@ -174,7 +175,7 @@ MCP-Werkzeug hier steht.
 
 | Typ | Felder |
 |---|---|
-| `store.Session` | `id, name, folderId, protocol (ssh/serial/rdp), host, port, user, auth (auto/password/key/agent), keyPath, hasPassword, serialPort, baud, dataBits, parity (none/odd/even/mark/space), stopBits (1/1.5/2), keepAlive, jumpId, forwards[{listen, host, port}], rdpDrives, rdpNoClipboard, logPath, color, notes, lastUsed` |
+| `store.Session` | `id, name, folderId, protocol (ssh/serial/rdp/local), host, port, user, auth (auto/password/key/agent), keyPath, hasPassword, serialPort, baud, dataBits, parity (none/odd/even/mark/space), stopBits (1/1.5/2), keepAlive, jumpId, forwards[{listen, host, port}], rdpDrives, rdpNoClipboard, shell (powershell/pwsh/cmd, nur bei local), startDir (nur bei local, leer = Benutzerverzeichnis), logPath, color, notes, lastUsed`. Lokale Sessions tauchen in `list_sessions` nicht auf, und weder Aufgaben noch KI-Zugriff können sie nutzen |
 | `store.Folder` | `id, name, parentId, layout?` |
 | `store.Layout` | `template (1/2v/2h/3m/4/6), slots: string[]` |
 | `store.Tree` | `folders, sessions` |

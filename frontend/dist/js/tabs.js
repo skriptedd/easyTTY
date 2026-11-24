@@ -464,7 +464,7 @@ export class TabManager {
     const t = this.byId(id || this.active);
     if (!t) return;
     this.activate(t.id); // the copy lands next to its source, not next to the active tab
-    this.open({ session: t.session, target: t.target }, { join: true });
+    this.open({ session: t.session, target: t.target, local: t.local }, { join: true });
   }
 
   applySettings(s) {
@@ -504,11 +504,12 @@ export class TabManager {
     const btn = (icon, label, title, onclick, opts = {}) => h("button", {
       class: "btn ghost" + (opts.on ? " on" : ""), title, onclick, disabled: opts.disabled,
     }, h("span", {}, icon), label);
+    const local = t.protocol === "local"; // a shell on this PC: no remote side
     this.toolsEl.replaceChildren(
-      t.session ? "" : btn("💾", "Speichern", "Diese Quick-Connect-Verbindung als Session speichern", () => this.onSaveSession?.(t)),
-      btn("📁", "SFTP", ssh ? "SFTP-Browser ein/aus (Alt+B)" : "SFTP gibt es nur bei SSH-Verbindungen",
+      t.session || local ? "" : btn("💾", "Speichern", "Diese Quick-Connect-Verbindung als Session speichern", () => this.onSaveSession?.(t)),
+      local ? "" : btn("📁", "SFTP", ssh ? "SFTP-Browser ein/aus (Alt+B)" : "SFTP gibt es nur bei SSH-Verbindungen",
         () => t.toggleSftp(), { on: t.sftpOpen, disabled: !ssh }),
-      btn("📊", "Status", "Server-Status der Gegenstelle: Last, RAM, Platte, Prozesse (Alt+I)", () => this.statusPanel?.toggle(), { on: !!this.statusPanel?.open }),
+      local ? "" : btn("📊", "Status", "Server-Status der Gegenstelle: Last, RAM, Platte, Prozesse (Alt+I)", () => this.statusPanel?.toggle(), { on: !!this.statusPanel?.open }),
       btn("⚡", "Schnipsel", "Befehls-Schnipsel in diesen Tab tippen (Alt+J)", (e) => this.onSnippets?.(e.currentTarget)),
       btn("🔍", "Suchen", "Im Terminal suchen (Alt+G)", () => t.openSearch()),
       btn("📄", "Log", t.logPath ? `Logs & Dateien (Alt+L), dieses Log ist markiert\n${t.logPath}` : "Logs & Dateien (Alt+L)\nDiese Sitzung wird nicht protokolliert",

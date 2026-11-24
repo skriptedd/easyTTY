@@ -10,8 +10,13 @@ import (
 const (
 	ProtocolSSH    = "ssh"
 	ProtocolSerial = "serial"
-	ProtocolRDP    = "rdp" // opens Windows' Remote Desktop (mstsc), not a terminal tab
+	ProtocolRDP    = "rdp"   // opens Windows' Remote Desktop (mstsc), not a terminal tab
+	ProtocolLocal  = "local" // a shell on this PC (PowerShell, cmd)
 )
+
+// localShells names the shells of a local session (see conn.Shell*) and
+// the default name of such a session.
+var localShells = map[string]string{"powershell": "PowerShell", "pwsh": "PowerShell 7", "cmd": "Eingabeaufforderung"}
 
 // Authentication modes for SSH sessions.
 const (
@@ -53,11 +58,14 @@ type Session struct {
 	Forwards  []Forward `json:"forwards,omitempty"`
 	RdpDrives bool      `json:"rdpDrives"` // local drives visible on the remote PC
 	// RdpNoClipboard keeps the clipboard local (no copy and paste with the remote PC).
-	RdpNoClipboard bool   `json:"rdpNoClipboard"`
-	LogPath        string `json:"logPath"`
-	Color          string `json:"color"`
-	Notes          string `json:"notes"`
-	LastUsed       int64  `json:"lastUsed"`
+	RdpNoClipboard bool `json:"rdpNoClipboard"`
+	// Shell and StartDir describe a local session ("" = PowerShell, home folder).
+	Shell    string `json:"shell,omitempty"`
+	StartDir string `json:"startDir,omitempty"`
+	LogPath  string `json:"logPath"`
+	Color    string `json:"color"`
+	Notes    string `json:"notes"`
+	LastUsed int64  `json:"lastUsed"`
 }
 
 // Forward makes 127.0.0.1:Listen on this PC reach Host:Port as seen from
@@ -113,10 +121,26 @@ func (s Session) Normalize() Session {
 	out.SerialPort = strings.TrimSpace(out.SerialPort)
 	out.JumpID = strings.TrimSpace(out.JumpID)
 	out.Forwards = normalizeForwards(out.Forwards)
+	out.StartDir = strings.TrimSpace(out.StartDir)
 	if out.Protocol == "" {
 		out.Protocol = ProtocolSSH
 	}
+	if out.Protocol != ProtocolLocal {
+		out.Shell, out.StartDir = "", ""
+	}
 	switch out.Protocol {
+	case ProtocolLocal:
+		if out.Shell == "" {
+			out.Shell = "powershell"
+		}
+		if out.Name == "" {
+			out.Name = localShells[out.Shell]
+		}
+		// Nothing of a connection applies to a shell on this PC.
+		out.Host, out.Port, out.User, out.Auth, out.KeyPath, out.KeepAlive = "", 0, "", "", "", 0
+		out.JumpID, out.Forwards = "", nil
+		out.SerialPort, out.Baud, out.DataBits, out.Parity, out.StopBits = "", 0, 0, "", ""
+		out.RdpDrives, out.RdpNoClipboard = false, false
 	case ProtocolSSH:
 		if out.Port == 0 {
 			out.Port = defaultSSHPort
@@ -204,6 +228,13 @@ func (s Session) Validate() error {
 		}
 		if strings.ContainsAny(s.User, "\r\n") {
 			return errors.New("Benutzer ungültig")
+		}
+	case ProtocolLocal:
+		if _, ok := localShells[s.Shell]; !ok {
+			return errors.New("unbekannte Shell: " + s.Shell)
+		}
+		if strings.ContainsAny(s.StartDir, "\r\n\"") {
+			return errors.New("Startordner ungültig")
 		}
 	case ProtocolSerial:
 		if s.SerialPort == "" {

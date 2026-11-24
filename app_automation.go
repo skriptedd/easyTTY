@@ -88,6 +88,8 @@ func (a *App) openHeadless(ctx context.Context, sessionID string) (automation.Ta
 		c = sc
 	case store.ProtocolRDP:
 		return automation.Target{}, fmt.Errorf("%s ist eine RDP-Session – Befehle gehen nur über SSH oder Seriell", s.Name)
+	case store.ProtocolLocal:
+		return automation.Target{}, fmt.Errorf("%s ist eine lokale Shell – Aufgaben laufen nur auf Geräten (SSH oder Seriell)", s.Name)
 	default:
 		return automation.Target{}, errors.New("unbekanntes Protokoll")
 	}

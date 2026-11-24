@@ -44,6 +44,9 @@ func shareable(s Session) Session {
 	out.HasPassword = false
 	out.LastUsed = 0
 	out.RdpDrives = false // a shared session must not get at the local drives
+	// A start folder is this PC's; from a file it could point a shell at a
+	// share holding planted programs (cmd runs the current folder first).
+	out.StartDir = ""
 	if out.Auth == AuthKey {
 		out.Auth = AuthAuto // key path is personal; colleagues pick their own
 	}

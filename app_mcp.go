@@ -91,8 +91,8 @@ func (b mcpBackend) Sessions() []mcpserver.SessionInfo {
 	tree := b.a.store.Tree()
 	out := make([]mcpserver.SessionInfo, 0, len(tree.Sessions))
 	for _, s := range tree.Sessions {
-		if s.Protocol == store.ProtocolRDP {
-			continue // no terminal, nothing an AI could run there
+		if s.Protocol == store.ProtocolRDP || s.Protocol == store.ProtocolLocal {
+			continue // no terminal, or this PC itself: nothing an AI may run there
 		}
 		info := mcpserver.SessionInfo{ID: s.ID, Name: s.Name, Folder: b.folderPath(tree, s.FolderID), Protocol: s.Protocol, Target: target(s)}
 		if s.Protocol == store.ProtocolSerial {
@@ -115,6 +115,9 @@ func (b mcpBackend) Tabs() []mcpserver.TabInfo {
 	defer b.a.mu.Unlock()
 	var out []mcpserver.TabInfo
 	for id, m := range b.a.tabMeta {
+		if b.a.localTabs[id] {
+			continue // a shell on this PC is never shown to an AI
+		}
 		if _, err := b.a.terms.Conn(id); err != nil {
 			continue // not connected (any more)
 		}
@@ -139,6 +142,9 @@ func (b mcpBackend) ReadTab(id string, lines int) (string, error) {
 	if !b.a.GetSettings().McpReadTabs {
 		return "", errors.New("Tabs lesen ist in easyTTY ausgeschaltet (Einstellungen → KI-Zugriff)")
 	}
+	if b.a.isLocalTab(id) {
+		return "", errLocalTab
+	}
 	raw, err := b.a.terms.Tail(id)
 	if err != nil {
 		return "", err
@@ -151,7 +157,13 @@ func (b mcpBackend) ReadTab(id string, lines int) (string, error) {
 	return strings.Join(all[max(0, len(all)-lines):], "\n"), nil
 }
 
+// errLocalTab keeps AI clients out of shells on this PC.
+var errLocalTab = errors.New("Lokale Shell-Tabs (PowerShell, cmd) sind für KI-Zugriff gesperrt")
+
 func (b mcpBackend) SendToTab(ctx context.Context, client, id, text string, enter bool) error {
+	if b.a.isLocalTab(id) {
+		return errLocalTab
+	}
 	if _, err := b.a.terms.Conn(id); err != nil {
 		return err
 	}
@@ -196,6 +208,9 @@ func (b mcpBackend) resolveSessions(refs []string) ([]string, []string, error) {
 		case 1:
 		default:
 			return nil, nil, fmt.Errorf("Session-Name %q ist mehrdeutig – bitte die ID aus list_sessions angeben", ref)
+		}
+		if hits[0].Protocol == store.ProtocolLocal {
+			return nil, nil, fmt.Errorf("%s: %w", hits[0].Name, errLocalTab)
 		}
 		if !slices.Contains(ids, hits[0].ID) {
 			ids = append(ids, hits[0].ID)

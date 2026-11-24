@@ -1,4 +1,5 @@
 // Session picker grouped by folder, with a search box (tasks, folders).
+import { sessionHow } from "./sessionInfo.js";
 import { h } from "./ui.js";
 
 /** Folder path for display, "Oberste Ebene" for the root. */
@@ -11,12 +12,13 @@ export function folderPath(folders, id) {
 
 /**
  * Checkbox list of sessions; ticks survive filtering.
- * Options: rdp (list RDP sessions too), skip (folder id whose sessions are left out),
+ * Options: rdp (list RDP and local shell sessions too: they have no device to
+ * run commands on), skip (folder id whose sessions are left out),
  * loginWarn (mark SSH sessions without stored login).
  */
 export function sessionPicker(tree, selected, { rdp = false, skip = null, loginWarn = false } = {}) {
   // Only sessions the list shows (deleted or hidden ones would stay ticked invisibly).
-  const shown = tree.sessions.filter((x) => (rdp || x.protocol !== "rdp") && (skip === null || x.folderId !== skip));
+  const shown = tree.sessions.filter((x) => (rdp || (x.protocol !== "rdp" && x.protocol !== "local")) && (skip === null || x.folderId !== skip));
   const listed = new Set(shown.map((x) => x.id));
   const chosen = new Set(selected.filter((id) => listed.has(id)));
   const groups = new Map();
@@ -33,7 +35,7 @@ export function sessionPicker(tree, selected, { rdp = false, skip = null, loginW
     const items = list.map((s) => {
       const cb = h("input", { type: "checkbox", checked: chosen.has(s.id) });
       cb.addEventListener("change", () => { if (cb.checked) chosen.add(s.id); else chosen.delete(s.id); count(); });
-      const how = s.protocol === "serial" ? s.serialPort : `${s.user ? s.user + "@" : ""}${s.host}`;
+      const how = sessionHow(s);
       const warn = loginWarn && s.protocol === "ssh" && (!s.user || (s.auth === "password" && !s.hasPassword)) ? " ⚠ ohne gespeicherte Anmeldung" : "";
       const el = h("label", { class: "check" }, cb, h("span", {}, s.name), h("span", { class: "muted" }, " " + how + warn));
       rows.push({ el, cb, text: [s.name, s.host, s.user, s.serialPort, folder].join(" ").toLowerCase() });

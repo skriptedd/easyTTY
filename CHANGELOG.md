@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.3.10 (2026-11-24)
+
+### Neu
+
+- Lokale Shell: PowerShell, PowerShell 7 oder cmd auf diesem PC als Tab, über Windows'
+  Pseudo-Konsole (Farben, PSReadLine, Größenänderung). Alt+P oder „›_ PowerShell“ oben öffnet
+  sofort eine PowerShell (Rechtsklick: andere Shell). Als Session vom Typ „Lokal“ gespeichert
+  auch mit eigenem Startordner, mit Session-Log wie bei SSH.
+- Lokale Tabs und Sessions sind für KI-Zugriff (MCP) und Aufgaben gesperrt: nicht gelistet,
+  nicht lesbar, nichts hineintippbar.
+
 ## 0.3.9 (2026-11-24)
 
 ### Neu

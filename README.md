@@ -72,6 +72,7 @@ Aus SecureCRT kommst du genauso, siehe Einstellungen → „Aus anderen Programm
 - **Serial**: COM-Port, Baud, Datenbits, Parität, Stoppbits, Break. Erkennt typische Konsolenkabel und sendet nach dem Öffnen auf Wunsch ein Enter.
 - **Konsolenserver und alte Geräte** (Opengear, Avocent, Lantronix): Port im Benutzernamen, zum Beispiel `admin:6`. Alte Verfahren wie CBC und SHA-1 kommen nur zum Zug, wenn der Server nichts Neueres kann.
 - **RDP**: läuft als Tab in easyTTY mit dem Remotedesktop-Steuerelement von Windows. Auflösung folgt dem Tab, Zwischenablage für die aktive Session (pro Session abschaltbar), auf Wunsch lokale Laufwerke. Rechtsklick auf die Session öffnet stattdessen mstsc.
+- **Lokale Shell**: PowerShell, PowerShell 7 oder cmd auf diesem PC als Tab (Alt+P oder „›_ PowerShell“ oben). Als Session gespeichert auch mit eigenem Startordner. KI-Zugriff und geplante Aufgaben kommen an lokale Tabs nicht heran.
 - **Passwörter** liegen verschlüsselt per Windows DPAPI, siehe [SECURITY.md](SECURITY.md).
 
 **Arbeiten**
@@ -126,6 +127,7 @@ Alle Kürzel zeigt **Alt+K**. Die Alt-Kürzel lassen sich in den Einstellungen a
 | Alt+D | Tab duplizieren |
 | Alt+L | Logs & Dateien (Logs, Configs, Schnipsel-Ausgaben suchen und öffnen) |
 | Alt+H | Neue Session anlegen (im markierten Ordner) |
+| Alt+P | PowerShell auf diesem PC |
 | Alt+N, F7 | Neuer Ordner (im SFTP dort, sonst im Session-Baum) |
 | Alt + / −, Alt+=, Strg+Mausrad | Schriftgröße größer, kleiner, normal |
 | Baum: Enter, F2, Entf | Verbinden, bearbeiten, löschen |

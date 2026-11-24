@@ -71,6 +71,8 @@ type App struct {
 	mcpRuns  chan struct{}     // limits concurrent run_commands
 	aiTabs   map[string]string // tabId -> run key while automation types into it
 	logFiles map[string]bool   // session logs written this run (FileList, OpenFile)
+	// localTabs are shells on this PC: never visible to MCP or automation.
+	localTabs map[string]bool
 }
 
 type promptAnswer struct {
@@ -101,6 +103,7 @@ func NewApp() *App {
 		tabMeta:    map[string]tabMeta{},
 		mcpRuns:    make(chan struct{}, maxMcpConcurrent),
 		aiTabs:     map[string]string{},
+		localTabs:  map[string]bool{},
 	}
 	a.gate = approval.NewGate(approvalUI{a}, fsutil.NewID)
 	return a

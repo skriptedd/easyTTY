@@ -17,6 +17,7 @@ import { askAddSessions, askNewFolder, askTargetFolder, putSessions } from "./fo
 import { TAB_DRAG, TabManager } from "./tabs.js";
 import { confirmDialog, contextMenu, h, icon, inputDialog, makeSplitter, modal, setDragActive, store, toast } from "./ui.js";
 import { GLOBAL_IN_FIELDS, keyAction } from "./keys.js";
+import { SHELLS, sessionHow } from "./sessionInfo.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,6 +70,11 @@ async function connectRDP(s) {
 function quickConnect(target) {
   const t = target.trim();
   if (t) tabs.open({ target: t });
+}
+
+/** An unsaved shell on this PC in a new tab (Alt+P, button in the top bar). */
+function openLocal(shell) {
+  tabs.open({ local: shell });
 }
 
 async function newSession(folderId = "", preset = {}) {
@@ -228,7 +234,7 @@ function sessionMenu(s, x, y) {
     s.protocol === "rdp"
       ? { label: "In eigenem Remotedesktop-Fenster öffnen", action: () => connectRDP(s) }
       : { label: "📁 Verbinden mit SFTP-Browser", disabled: s.protocol !== "ssh", action: () => connect(s, true) },
-    { label: "⚙ Befehle ausführen / planen…", disabled: s.protocol === "rdp", action: () => editTask({ name: `Befehle auf ${s.name}`, sessionIds: [s.id] }) },
+    { label: "⚙ Befehle ausführen / planen…", disabled: s.protocol === "rdp" || s.protocol === "local", action: () => editTask({ name: `Befehle auf ${s.name}`, sessionIds: [s.id] }) },
     "-",
     { label: "Bearbeiten…", hint: "F2", action: () => editExisting(s) },
     { label: "Duplizieren", action: () => act(api.DuplicateSession, s.id) },
@@ -368,7 +374,7 @@ function renderRecent() {
   const recent = tree.recent();
   box.replaceChildren(...recent.map((s) => h("div", { class: "recent-card", onclick: () => connect(s) },
     h("div", { class: "t" }, s.color ? h("span", { style: { color: s.color } }, "● ") : null, s.name),
-    h("div", { class: "h" }, s.protocol === "serial" ? s.serialPort : (s.user ? s.user + "@" : "") + s.host))));
+    h("div", { class: "h" }, sessionHow(s)))));
 }
 
 let shownTab = ""; // "tabId|sessionId" the tree selection was last synced to
@@ -583,6 +589,7 @@ function runAction(action) {
     case "log": showFiles({ select: tab?.logPath || "" }); return true;
     case "newfolder": newFolderHere(); return true;
     case "newsession": newSession(tree.folderForNew()); return true; // in the marked folder
+    case "powershell": openLocal("powershell"); return true;
     case "next": tabs.cycle(1); return true;
     case "prev": tabs.cycle(-1); return true;
     case "tab": tabs.showNth(+arg - 1); return true;
@@ -678,6 +685,11 @@ async function main() {
       e.target.value = "";
       newSession("", m ? { host: m[2], user: m[1] || "", port: m[3] ? +m[3] : 22, name: m[2] } : {});
     }
+  });
+  $("btn-local").addEventListener("click", () => openLocal("powershell"));
+  $("btn-local").addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    contextMenu(e.clientX, e.clientY, SHELLS.map(([v, l]) => ({ label: l, action: () => openLocal(v) })));
   });
   $("btn-new-session").addEventListener("click", () => newSession(tree.selected?.type === "folder" ? tree.selected.id : ""));
   $("btn-new-folder").addEventListener("click", () => newFolder(""));

@@ -52,6 +52,7 @@ export class StatusPanel {
     const tab = this.tabs.current();
     this.tabId = tab?.id || null;
     if (!tab) return this.message("Keine Verbindung offen.");
+    if (tab.protocol === "local") return this.message("Server-Status gibt es nur bei SSH-Verbindungen – das hier ist eine Shell auf diesem PC (dafür: Task-Manager).");
     if (tab.protocol !== "ssh") return this.message("Server-Status gibt es nur bei SSH-Verbindungen – an der seriellen Konsole würde eine Abfrage mitten in deine Eingabe tippen.");
     if (tab.state !== "connected") return this.message("Nicht verbunden.");
     const cached = this.last.get(tab.id);

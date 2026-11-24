@@ -8,6 +8,7 @@ import { openFile, showFiles } from "./files.js";
 import { HOLD_LIMIT_MS, HOLD_MS, Highlighter } from "./highlight.js";
 import { SftpPanel } from "./sftp.js";
 import { showSSHInfo } from "./sshInfo.js";
+import { shellName } from "./sessionInfo.js";
 
 /** Drag data of a tab or tile; the value is the tab id. */
 export const TAB_DRAG = "application/x-easytty-tab";
@@ -49,10 +50,11 @@ export class Tab {
     this.id = opts.id || newTabId(); // the backend picks the id when an AI run opens the tab
     this.session = opts.session || null;
     this.target = opts.target || "";
+    this.local = opts.local || ""; // unsaved shell on this PC: powershell, pwsh, cmd
     this.sftpOnConnect = !!opts.sftp; // "Verbinden mit SFTP-Browser"
     this.groupId = opts.group || null; // window layout this tab belongs to
     this.slot = opts.slot ?? 0;
-    this.title = this.session ? this.session.name : this.target;
+    this.title = this.session ? this.session.name : this.local ? shellName(this.local) : this.target;
     this.state = "new";
     this.message = "";
     this.sftp = null;
@@ -109,7 +111,7 @@ export class Tab {
     }, ACK_DELAY);
   }
 
-  get protocol() { return this.session ? this.session.protocol : "ssh"; }
+  get protocol() { return this.session ? this.session.protocol : this.local ? "local" : "ssh"; }
 
   build() {
     const s = this.mgr.settings;
@@ -242,7 +244,8 @@ export class Tab {
       // Search highlights matches via the selection; that must not hit the clipboard.
       if (this.mgr.settings.copyOnSelect && t.hasSelection() && !this.searchBar.classList.contains("open")) clipboard.set(t.getSelection());
     });
-    t.onTitleChange((title) => { if (title && !this.session) this.setTitle(title); });
+    // A quick-connect tab takes the remote's title; a local shell would only show its program path.
+    t.onTitleChange((title) => { if (title && !this.session && !this.local) this.setTitle(title); });
     // Other browser paste paths (Shift+Einfg …) are not shortcuts any more: one way, Alt+V.
     this.termEl.addEventListener("paste", (e) => {
       e.preventDefault();
@@ -262,8 +265,10 @@ export class Tab {
 
   subtitle() {
     const s = this.session;
+    if (this.local) return shellName(this.local) + " auf diesem PC";
     if (!s) return "SSH " + this.target;
     if (s.protocol === "serial") return `Serial ${s.serialPort} @ ${s.baud}`;
+    if (s.protocol === "local") return shellName(s.shell) + " auf diesem PC" + (s.startDir ? ` (${s.startDir})` : "");
     return `SSH ${s.user ? s.user + "@" : ""}${s.host}:${s.port}`;
   }
 
@@ -276,8 +281,8 @@ export class Tab {
 
   menu(x, y) {
     contextMenu(x, y, [
-      { label: "Neu verbinden", action: () => this.connect(), disabled: this.state === "connecting" },
-      ...(this.session ? [] : [{ label: "💾 Als Session speichern…", action: () => this.mgr.onSaveSession?.(this) }]),
+      { label: this.protocol === "local" ? "Neu starten" : "Neu verbinden", action: () => this.connect(), disabled: this.state === "connecting" },
+      ...(this.session || this.local ? [] : [{ label: "💾 Als Session speichern…", action: () => this.mgr.onSaveSession?.(this) }]),
       { label: "Duplizieren", hint: "Alt+D", action: () => this.mgr.duplicate(this.id) },
       ...(this.protocol === "serial" && this.session && (this.session.user || this.session.hasPassword)
         ? [{ label: "Anmelden (Benutzer + Passwort senden)", disabled: this.state !== "connected", action: () => api.SerialLogin(this.id).catch((e) => toast(errMsg(e), "err")) }]
@@ -290,8 +295,10 @@ export class Tab {
       ...(this.protocol === "ssh"
         ? [{ label: "SSH-Verbindung (Verfahren, Schlüssel)…", disabled: this.state !== "connected", action: () => showSSHInfo(this.id, this.title) }]
         : []),
-      { label: "Running-Config sichern", disabled: this.state !== "connected" || this.pasting, action: () => this.saveRunningConfig() },
-      { label: "Configs vergleichen…", action: () => openConfigDiff() },
+      ...(this.protocol === "local" ? [] : [
+        { label: "Running-Config sichern", disabled: this.state !== "connected" || this.pasting, action: () => this.saveRunningConfig() },
+        { label: "Configs vergleichen…", action: () => openConfigDiff() },
+      ]),
       "-",
       { label: "Log dieser Sitzung öffnen", disabled: !this.logPath, action: () => openFile(this.logPath) },
       { label: "Logs & Dateien…", hint: "Alt+L", action: () => this.revealLog() },
@@ -334,7 +341,7 @@ export class Tab {
     const path = this.session ? this.mgr.folderPath(this.session.folderId) : [];
     this.folderEl.textContent = path.length ? path.at(-1) + " ›" : "";
     this.folderEl.hidden = !path.length;
-    const full = this.session ? (path.length ? path.join(" / ") : "oberste Ebene") : "Quick Connect (nicht gespeichert)";
+    const full = this.session ? (path.length ? path.join(" / ") : "oberste Ebene") : this.local ? "Lokal (nicht gespeichert)" : "Quick Connect (nicht gespeichert)";
     this.tabEl.title = `${full} › ${this.title}\n${this.subtitle()}`;
   }
 
@@ -359,6 +366,7 @@ export class Tab {
     try {
       api.TrackTab(this.id, this.title, this.session?.id || "").catch(() => {});
       if (this.session) await api.Connect(this.id, this.session.id, cols, rows);
+      else if (this.local) await api.OpenLocalShell(this.id, this.local, cols, rows);
       else this.quickTarget = await api.QuickConnect(this.id, this.target, cols, rows);
     } catch (e) {
       this.onState({ state: "error", message: errMsg(e) });
@@ -379,7 +387,7 @@ export class Tab {
     } else if (st.state === "connected") {
       const { cols, rows } = this.term;
       api.Resize(this.id, cols, rows).catch(() => {});
-      if (!this.session && !this.saveHintShown) {
+      if (!this.session && !this.local && !this.saveHintShown) {
         this.saveHintShown = true;
         toast("Quick Connect – mit „💾 Speichern“ oben rechts als Session ablegen.", "info", 6000);
       }

@@ -25,6 +25,30 @@ func TestRDPSessionNormalizeValidate(t *testing.T) {
 	}
 }
 
+func TestLocalSessionNormalizeValidate(t *testing.T) {
+	s := Session{Protocol: ProtocolLocal, Host: "h", Port: 22, User: "u", JumpID: "j", SerialPort: "COM1", StartDir: ` C:\Work `}.Normalize()
+	if s.Shell != "powershell" || s.Name != "PowerShell" || s.Host != "" || s.Port != 0 || s.User != "" || s.JumpID != "" || s.SerialPort != "" || s.StartDir != `C:\Work` {
+		t.Fatalf("normalize: %+v", s)
+	}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if n := (Session{Protocol: ProtocolLocal, Shell: "cmd"}).Normalize().Name; n != "Eingabeaufforderung" {
+		t.Errorf("cmd name = %q", n)
+	}
+	for _, bad := range []Session{
+		{Protocol: ProtocolLocal, Shell: "bash"},
+		{Protocol: ProtocolLocal, Shell: "pwsh", StartDir: "C:\\x\" -Command evil"},
+	} {
+		if err := bad.Normalize().Validate(); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+	if ssh := (Session{Host: "h", Shell: "cmd", StartDir: "C:\\"}).Normalize(); ssh.Shell != "" || ssh.StartDir != "" {
+		t.Errorf("local fields left on ssh: %+v", ssh)
+	}
+}
+
 func TestNormalizeDropsRdpSwitchesOutsideRdp(t *testing.T) {
 	for _, p := range []string{ProtocolSSH, ProtocolSerial} {
 		s := Session{Protocol: p, Host: "h", SerialPort: "COM1", RdpDrives: true, RdpNoClipboard: true}.Normalize()

@@ -1,4 +1,5 @@
 // Session tree in the sidebar: folders, filtering, drag & drop, context menus.
+import { sessionHow } from "./sessionInfo.js";
 import { h, icon, store } from "./ui.js";
 
 export const DRAG_TYPE = "application/x-easytty";
@@ -249,8 +250,7 @@ export class SessionTree {
   }
 
   sessionNode(s, depth, inRecent) {
-    const defPort = s.protocol === "rdp" ? 3389 : 22;
-    const sub = s.protocol === "serial" ? `${s.serialPort} ${s.baud}` : (s.user ? s.user + "@" : "") + s.host + (s.port !== defPort ? ":" + s.port : "");
+    const sub = s.protocol === "serial" ? `${s.serialPort} ${s.baud}` : sessionHow(s, { withPort: true });
     // Jump host and port forwards: one small mark, the details in the tooltip.
     const route = [
       s.jumpId ? `Über Sprung-Host: ${this.session(s.jumpId)?.name || "?"}` : "",
@@ -264,7 +264,8 @@ export class SessionTree {
       title: [s.name, ...route, s.notes].filter(Boolean).join("\n"),
     },
     h("span", { class: "twisty" }),
-    s.color ? h("span", { class: "dot", style: { background: s.color } }) : h("span", { class: "ico", title: s.protocol === "rdp" ? "Remotedesktop" : null }, s.protocol === "serial" ? "⏚" : s.protocol === "rdp" ? icon("monitor") : "❯"),
+    s.color ? h("span", { class: "dot", style: { background: s.color } }) : h("span", { class: "ico", title: { rdp: "Remotedesktop", local: "Shell auf diesem PC" }[s.protocol] || null },
+      { serial: "⏚", rdp: icon("monitor"), local: "›_" }[s.protocol] || "❯"),
     h("span", { class: "label" }, s.name),
     route.length ? h("span", { class: "route", title: route.join("\n") }, "↪") : null,
     this.live.has(s.id) ? h("span", { class: "live", title: "verbunden" }) : null,

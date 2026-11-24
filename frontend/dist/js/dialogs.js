@@ -4,6 +4,7 @@ import { h, icon, modal, toast } from "./ui.js";
 import { fontPicker } from "./fonts.js";
 import { highlightFields } from "./highlightEditor.js";
 import { mcpFields } from "./mcp.js";
+import { SHELLS } from "./sessionInfo.js";
 
 export const COLORS = ["", "#ff5d6c", "#f2b84b", "#3ccf91", "#4fb3ff", "#a68bff", "#ff8ad8", "#8a94a6"];
 const BAUDS = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400];
@@ -199,16 +200,26 @@ export async function editSession(initial, folders, sessions = []) {
     h("label", { class: "check full" }, rdpDrives, "Lokale Laufwerke im Remotedesktop zeigen"),
     h("div", { class: "full hint" }, "Öffnet als Tab in easyTTY, die Auflösung folgt der Tab-Größe. Das Passwort liegt verschlüsselt in easyTTY und geht direkt an das Remotedesktop-Steuerelement von Windows. Rechtsklick auf die Session → „In eigenem Remotedesktop-Fenster öffnen“ für Vollbild."),
   );
+  // A shell on this PC: which one, and where it starts.
+  const shell = h("select", {}, SHELLS.map(([v, l]) => h("option", { value: v }, l)));
+  shell.value = s.shell || "powershell";
+  const startDir = h("input", { value: s.startDir || "", placeholder: "leer = Benutzerordner, z. B. C:\\Skripte", spellcheck: "false" });
+  const localBox = h("div", { class: "grid full" },
+    field("Shell", shell), field("Startordner", startDir),
+    h("div", { class: "full hint" }, "Öffnet die Shell auf diesem PC als Tab. Lokale Tabs bleiben für KI-Zugriff und geplante Aufgaben gesperrt. Ohne gespeicherte Session: Alt+P."),
+  );
   const seg = h("div", { class: "seg" },
     h("button", { type: "button", "data-p": "ssh" }, "SSH"),
     h("button", { type: "button", "data-p": "serial" }, "Serial"),
     h("button", { type: "button", "data-p": "rdp" }, "RDP"),
+    h("button", { type: "button", "data-p": "local" }, "Lokal"),
   );
   const sync = () => {
     seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.p === protocol));
     sshBox.style.display = protocol === "ssh" ? "" : "none";
     serialBox.style.display = protocol === "serial" ? "" : "none";
     rdpBox.style.display = protocol === "rdp" ? "" : "none";
+    localBox.style.display = protocol === "local" ? "" : "none";
     logRow.style.display = protocol === "rdp" ? "none" : "";
     sshBox.querySelector(".key-row").style.display = auth.value === "key" ? "" : "none";
   };
@@ -237,6 +248,8 @@ export async function editSession(initial, folders, sessions = []) {
     dataBits: parseInt(dataBits.value, 10),
     parity: parity.value,
     stopBits: stopBits.value,
+    shell: shell.value,
+    startDir: startDir.value.trim(),
     logPath: logPath.value.trim(),
     notes: notes.value,
     color,
@@ -273,7 +286,7 @@ export async function editSession(initial, folders, sessions = []) {
       body: h("div", { class: "grid" },
         h("label", { class: "field" }, h("span", {}, "Name"), name, nameHint), field("Ordner", folder),
         h("div", { class: "field full" }, h("span", {}, "Protokoll"), seg),
-        sshBox, serialBox, rdpBox,
+        sshBox, serialBox, rdpBox, localBox,
         logRow,
         h("div", { class: "field full" }, h("span", {}, "Farbe"), swatches),
         field("Notizen", notes, "full"),

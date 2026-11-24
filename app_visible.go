@@ -84,6 +84,9 @@ func (a *App) visibleOpener(client, key string) automation.Opener {
 		if s.Protocol == store.ProtocolRDP {
 			return automation.Target{}, fmt.Errorf("%s: In einen Remotedesktop lassen sich keine Befehle tippen", s.Name)
 		}
+		if s.Protocol == store.ProtocolLocal {
+			return automation.Target{}, fmt.Errorf("%s: %w", s.Name, errLocalTab)
+		}
 		tabID := a.connectedTab(sessionID)
 		if tabID == "" {
 			tabID = "k" + fsutil.NewID()
