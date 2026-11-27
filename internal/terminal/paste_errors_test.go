@@ -19,14 +19,22 @@ type ciscoDevice struct {
 	bad  map[string]string // line -> word the marker points at
 	logs map[string]string // line -> syslog message printed after it
 	buf  []byte
+	outq chan string // one writer keeps the output in order, like a real device
 }
 
 const ciscoPrompt = "sw1(config)#"
 
 func newCiscoDevice(bad, logs map[string]string) *ciscoDevice {
 	r, w := io.Pipe()
-	d := &ciscoDevice{r: r, w: w, bad: bad, logs: logs}
-	go func() { _, _ = w.Write([]byte(ciscoPrompt)) }()
+	d := &ciscoDevice{r: r, w: w, bad: bad, logs: logs, outq: make(chan string, 64)}
+	d.outq <- ciscoPrompt
+	go func() {
+		for out := range d.outq {
+			if _, err := w.Write([]byte(out)); err != nil {
+				return
+			}
+		}
+	}()
 	return d
 }
 
@@ -57,8 +65,7 @@ func (d *ciscoDevice) Write(p []byte) (int, error) {
 		if msg, ok := d.logs[line]; ok {
 			out += msg + "\r\n"
 		}
-		go func(out string) { _, _ = d.w.Write([]byte(out + ciscoPrompt)) }(out)
-		time.Sleep(5 * time.Millisecond) // keep the answers in order
+		d.outq <- out + ciscoPrompt
 	}
 	return len(p), nil
 }
