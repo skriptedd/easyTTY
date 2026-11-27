@@ -383,6 +383,18 @@ kbd {
 .sftp-row .i { text-align: center; }
 .sftp-msg { padding: 18px; color: var(--muted); text-align: center; }
 .sftp-msg.err { color: var(--err); }
+
+/* Paste stopped at a rejected line: the lines around it, the caret, the device's answer. */
+.paste-error { display: flex; flex-direction: column; gap: 8px; }
+.pe-code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: 12.5px/1.5 var(--mono); white-space: pre; overflow-x: auto; }
+.pe-line { display: flex; gap: 12px; }
+.pe-num { color: var(--muted); user-select: none; }
+.pe-line.bad { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--text); border-radius: 3px; }
+.pe-line.caret { color: var(--err); font-weight: 700; }
+.pe-line.unsent { opacity: .55; }
+.pe-reply { color: var(--err); }
+.pe-label { font-size: 12px; color: var(--muted); }
+.pe-list { white-space: normal; max-height: 220px; overflow-y: auto; }
 .transfers { border-top: 1px solid var(--line); max-height: 40%; overflow: auto; }
 .transfers:empty { display: none; }
 .xfer { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12px; }

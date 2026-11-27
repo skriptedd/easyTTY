@@ -79,7 +79,7 @@ Aus SecureCRT kommst du genauso, siehe Einstellungen → „Aus anderen Programm
 
 - **Terminal**: xterm.js mit WebGL, Truecolor, Unicode, Suche, Zoom.
 - **Tabs und Layouts**: pro Ordner ein Raster mit fester Belegung (bis 6 Fenster), eingerichtet per Drag & Drop. Jedes offene Layout ist ein Block in der Tableiste. Mehrere Layouts laufen parallel, gewechselt wird per Klick, Alt+1…9 oder Strg+Tab. Normal geöffnete Sessions bleiben eigene Tabs, hineingezogene Sessions werden ein Fenster mehr. Offene Fenster tauschen ihren Platz, wenn du sie an der Titelzeile aufeinander ziehst.
-- **Sicheres Einfügen**: große Configs gehen Zeile für Zeile, die nächste erst nach dem Echo des Geräts. Mit Vorschau, Fortschritt, Abbruch und Bericht.
+- **Sicheres Einfügen**: große Configs gehen Zeile für Zeile, die nächste erst nach dem Echo des Geräts. Mit Vorschau, Fortschritt, Abbruch und Bericht. Lehnt das Gerät eine Zeile ab (`% Invalid input`, `Error:`, `syntax error` …), hält easyTTY an und zeigt die Zeile im Zusammenhang, die Spalte aus der `^`-Markierung und die Meldung. Danach korrigieren und weiter, überspringen oder beenden.
 - **Sammeländerungen**: Rechtsklick auf einen Ordner oder „Alle Sessions“ ändert Benutzer, Passwort, Anmeldeart, Schlüssel, Keepalive oder Farbe für alle Sessions darin.
 - **Sessions in Ordner**: Ein neuer Ordner fragt gleich nach seinen Sessions. Markierte Sessions lassen sich per Rechtsklick oder Ziehen in einen Ordner verschieben, mit Strg kopieren (samt gespeichertem Passwort).
 - **Namensschema**: Groß-/Kleinschreibung und Leerzeichen einheitlich halten.

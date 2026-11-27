@@ -11,9 +11,10 @@ import (
 const maxPasteLineDelayMs = 2000
 
 // Paste sends multi-line text paced line by line (see terminal.Manager.Paste).
-// lineDelayMs < 0 uses the default from the settings. It returns at once;
-// progress arrives as "paste:progress" events.
-func (a *App) Paste(tabID, text string, lineDelayMs int) error {
+// lineDelayMs < 0 uses the default from the settings; stopOnError stops at
+// the first line the device rejects. It returns at once; progress arrives as
+// "paste:progress" events.
+func (a *App) Paste(tabID, text string, lineDelayMs int, stopOnError bool) error {
 	if _, err := a.terms.Conn(tabID); err != nil {
 		return err
 	}
@@ -31,7 +32,7 @@ func (a *App) Paste(tabID, text string, lineDelayMs int) error {
 		lineDelayMs = a.GetSettings().PasteLineDelay
 	}
 	lineDelayMs = min(lineDelayMs, maxPasteLineDelayMs)
-	opts := terminal.PasteOptions{LineDelay: time.Duration(lineDelayMs) * time.Millisecond}
+	opts := terminal.PasteOptions{LineDelay: time.Duration(lineDelayMs) * time.Millisecond, StopOnError: stopOnError}
 	go func() {
 		defer func() {
 			a.mu.Lock()
@@ -39,8 +40,12 @@ func (a *App) Paste(tabID, text string, lineDelayMs int) error {
 			a.mu.Unlock()
 			cancel()
 		}()
-		err := a.terms.Paste(ctx, tabID, text, opts, func(p terminal.PasteProgress) { a.emit("paste:progress", p) })
-		if err != nil && err != terminal.ErrPasteBusy {
+		ended := false // the final state was reported already (done, cancelled, rejected line …)
+		err := a.terms.Paste(ctx, tabID, text, opts, func(p terminal.PasteProgress) {
+			ended = p.State != "running"
+			a.emit("paste:progress", p)
+		})
+		if err != nil && !ended && err != terminal.ErrPasteBusy {
 			a.emit("paste:progress", terminal.PasteProgress{ID: tabID, State: "error", Error: err.Error()})
 		}
 	}()

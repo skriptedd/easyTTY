@@ -150,6 +150,7 @@ func session(ch ssh.Channel, reqs <-chan *ssh.Request, user, root string) {
 
 func shell(ch io.ReadWriter, user string, cols func() int) {
 	prompt := fmt.Sprintf("\x1b[32m%s@devsshd\x1b[0m:\x1b[34m~\x1b[0m$ ", user)
+	visiblePromptLen = len(user + "@devsshd:~$ ")
 	fmt.Fprintf(ch, "Willkommen bei devsshd – Befehle: help, ls, seq N, colors, cols, exit\r\n%s", prompt)
 	var line []byte
 	var more []string // output lines still waiting behind "--More--"
@@ -175,7 +176,8 @@ func shell(ch io.ReadWriter, user string, cols func() int) {
 			switch b {
 			case '\r', '\n':
 				io.WriteString(ch, "\r\n")
-				cmd := strings.TrimSpace(string(line))
+				raw := string(line) // with its indent: the error marker counts from the prompt
+				cmd := strings.TrimSpace(raw)
 				line = line[:0]
 				if out := showOutput(cmd); out != nil {
 					if more = page(ch, out); len(more) == 0 {
@@ -183,7 +185,7 @@ func shell(ch io.ReadWriter, user string, cols func() int) {
 					}
 					continue
 				}
-				if !run(ch, cmd, cols()) {
+				if !run(ch, raw, cols()) {
 					return
 				}
 				io.WriteString(ch, prompt)
@@ -252,7 +254,8 @@ func showOutput(cmd string) []string {
 	return nil
 }
 
-func run(w io.Writer, cmd string, cols int) bool {
+func run(w io.Writer, raw string, cols int) bool {
+	cmd := raw
 	fields := strings.Fields(cmd)
 	if len(fields) == 0 {
 		return true
@@ -293,10 +296,26 @@ func run(w io.Writer, cmd string, cols int) bool {
 		}
 		io.WriteString(w, sb.String())
 	default:
-		fmt.Fprintf(w, "%s: command not found\r\n", fields[0])
+		if !configWords[fields[0]] {
+			// Like IOS: a marker under the unknown word, then the message, so
+			// "Bei Fehler anhalten" of a paced paste can be tried out.
+			fmt.Fprintf(w, "%s^\r\n%% Invalid input detected at '^' marker.\r\n\r\n",
+				strings.Repeat(" ", visiblePromptLen+strings.Index(cmd, fields[0])))
+		}
 	}
 	return true
 }
+
+// configWords are accepted silently, like config lines pasted into a switch.
+var configWords = map[string]bool{
+	"!": true, "conf": true, "configure": true, "end": true, "hostname": true, "interface": true,
+	"description": true, "switchport": true, "shutdown": true, "no": true, "vlan": true, "name": true,
+	"ip": true, "spanning-tree": true, "username": true, "line": true, "logging": true, "ntp": true,
+}
+
+// visiblePromptLen is the prompt without its colour codes ("test@devsshd:~$ "),
+// set when the shell starts.
+var visiblePromptLen int
 
 var started = time.Now()
 

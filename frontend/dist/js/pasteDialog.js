@@ -15,8 +15,11 @@ export function cleanPaste(text, { dropEmpty, dropBang, dropHash, trimRight }) {
   return lines.join("\n");
 }
 
+/** "Bei Fehler anhalten" as last chosen in the dialog (on by default). */
+export const stopOnErrorDefault = () => store.get(OPTS_KEY, {}).stopOnError ?? true;
+
 /**
- * Resolves with { text, mode: "paced"|"fast"|"file", delay } or null when cancelled.
+ * Resolves with { text, mode: "paced"|"fast"|"file", delay, stopOnError } or null when cancelled.
  * "file" runs the lines as commands and saves their output to a file.
  * fastDefault: the remote program handles big pastes itself (bracketed paste).
  */
@@ -28,6 +31,7 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
     dropBang: !!(saved.dropBang ?? saved.dropComments),
     dropHash: !!(saved.dropHash ?? saved.dropComments),
     trimRight: saved.trimRight ?? true,
+    stopOnError: saved.stopOnError ?? true,
   };
 
   const area = h("textarea", { class: "paste-edit", spellcheck: "false", wrap: "off" });
@@ -58,6 +62,8 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
   let mode = fastDefault ? "fast" : "paced";
   const pause = h("input", { type: "number", min: 0, max: 2000, value: delay, class: "paste-pause", title: "Zusätzliche Pause nach jeder Zeile" });
   const pauseField = h("label", { class: "paste-pause-field" }, "Pause", pause, "ms pro Zeile");
+  const stopChip = chip("stopOnError", "Bei Fehler anhalten",
+    "Lehnt das Gerät eine Zeile ab (% Invalid input, Error:, syntax error …), wird nichts mehr gesendet und easyTTY zeigt die Stelle");
   const modeBtn = (value, label, title) => h("button", { type: "button", "data-mode": value, title }, label);
   const modes = h("div", { class: "seg" },
     modeBtn("paced", "Zeilenweise mit Echo", "Wartet nach jeder Zeile auf das Gerät – sicher für Switches und Router"),
@@ -67,6 +73,7 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
   const syncMode = () => {
     modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
     pauseField.hidden = mode !== "paced";
+    stopChip.hidden = mode !== "paced";
     sendBtn.textContent = mode === "file" ? "Ausführen & speichern" : "Einfügen";
   };
   modes.addEventListener("click", (e) => { if (e.target.dataset.mode) { mode = e.target.dataset.mode; syncMode(); } });
@@ -78,6 +85,7 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
       text: cleanPaste(area.value, opts),
       mode,
       delay: Math.max(0, Math.min(2000, parseInt(pause.value, 10) || 0)),
+      stopOnError: opts.stopOnError,
     });
     sendBtn.onclick = send;
     return {
@@ -96,7 +104,7 @@ export function editPaste(text, target, { fastDefault = false, delay = 0 } = {})
             chip("dropHash", "Zeilen mit #", "Zeilen, die mit # anfangen (Kommentare in Skripten), nicht senden"))),
         h("div", { class: "paste-row" },
           h("span", { class: "paste-label" }, "Senden"),
-          modes, pauseField)),
+          modes, pauseField, stopChip)),
       foot: [
         h("span", { class: "left hint" }, count),
         h("button", { class: "btn", onclick: () => close(null) }, "Abbrechen"),

@@ -1,5 +1,24 @@
 # Änderungen
 
+## 0.3.11 (2026-11-27)
+
+### Neu
+
+- Einfügen hält bei Fehlern an: Nach jeder Zeile prüft easyTTY die Antwort des Geräts
+  (`% Invalid input`, `% Incomplete command`, `Error:`, `syntax error`, `Invalid input:` …,
+  Syslog-Meldungen und Warnungen zählen nicht). Bei einer abgelehnten Zeile wird nichts mehr
+  gesendet, und ein Fenster zeigt die Zeile zwischen ihren Nachbarn, die Spalte aus der
+  `^`-Markierung und die Meldung. „Korrigieren & weiter“ öffnet den Rest ab dieser Zeile zum
+  Bearbeiten, „Überspringen“ macht mit der nächsten weiter. Schaltbar im Einfüge-Fenster
+  („Bei Fehler anhalten“, Standard an). Ohne Anhalten listet der Einfüge-Bericht alle
+  abgelehnten Zeilen.
+
+### Verbessert
+
+- Einfügen wartet auf ein fehlendes Echo nur noch so lange, wie das Gerät wirklich braucht
+  (das Achtfache seines langsamsten Echos, mindestens 0,5 s, höchstens 3 s) statt jedes Mal
+  3 s. Zeilen, die das Gerät nicht wörtlich zurückschickt, bremsen dadurch kaum noch.
+
 ## 0.3.10 (2026-11-24)
 
 ### Neu

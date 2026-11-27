@@ -2,7 +2,7 @@
 import { api, b64ToBytes, clipboard, errMsg, events, openURL } from "./api.js";
 import { closeX, contextMenu, h, makeSplitter, modal, toast } from "./ui.js";
 import { keyAction } from "./keys.js";
-import { editPaste } from "./pasteDialog.js";
+import { editPaste, stopOnErrorDefault } from "./pasteDialog.js";
 import { openConfigDiff } from "./configDiff.js";
 import { openFile, showFiles } from "./files.js";
 import { HOLD_LIMIT_MS, HOLD_MS, Highlighter } from "./highlight.js";
@@ -418,22 +418,23 @@ export class Tab {
    * hand it over at once. Otherwise (Cisco IOS & co.) the backend sends it
    * line by line and waits for each echo, so big configs arrive intact.
    */
-  async pasteText(text) {
+  async pasteText(text, { offset = 0, resume = false, edit = null } = {}) {
     // Control characters in the clipboard could end bracketed paste early or send Ctrl+C/Ctrl+D.
     text = (text || "").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
     if (!text || this.state !== "connected" || this.pasting || this.pasteDialog) return;
     const multi = text.replace(/\r\n?/g, "\n").replace(/\n$/, "").includes("\n");
-    if (!multi) { this.term.paste(text); return; }
-    const fastDefault = !!this.term.modes.bracketedPasteMode;
+    if (!multi && !resume) { this.term.paste(text); return; }
+    const fastDefault = !resume && !!this.term.modes.bracketedPasteMode;
     let mode = fastDefault ? "fast" : "paced";
     let delay = -1; // backend default from the settings
-    if (this.mgr.settings.pasteConfirm) {
+    let stopOnError = stopOnErrorDefault();
+    if (edit ?? this.mgr.settings.pasteConfirm) {
       this.pasteDialog = true;
       let res;
       try { res = await editPaste(text, this.title, { fastDefault, delay: this.mgr.settings.pasteLineDelay || 0 }); } finally { this.pasteDialog = false; }
       this.focus();
       if (!res || this.state !== "connected") return;
-      ({ text, mode, delay } = res);
+      ({ text, mode, delay, stopOnError } = res);
     }
     if (mode === "fast") { this.term.paste(text); return; }
     if (mode === "file") {
@@ -441,12 +442,15 @@ export class Tab {
       await this.toFile(() => api.RunSnippetToFile(this.id, "Ausgabe", text), "Ausgabe gespeichert");
       return;
     }
-    const total = text.split("\n").length;
+    const lines = text.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n");
+    // Kept to show a rejected line in its context; offset keeps the numbers of
+    // the first paste when the rest is sent again after a fix.
+    this.pasteSent = { lines, offset };
     try {
       this.pasting = true;
       this.pasteBarHidden = false;
-      this.showPasteBar({ done: 0, total, timeouts: 0 });
-      await api.Paste(this.id, text, delay);
+      this.showPasteBar({ done: 0, total: lines.length, timeouts: 0 });
+      await api.Paste(this.id, lines.join("\n"), delay, stopOnError);
     } catch (e) {
       this.pasting = false;
       this.pasteBar.classList.remove("open");
@@ -518,10 +522,16 @@ export class Tab {
     if (p.state === "running") { this.showPasteBar(p); return; }
     this.pasting = false;
     this.pasteBar.classList.remove("open");
-    this.lastPaste = { ...p, at: new Date() };
+    this.lastPaste = { ...p, at: new Date(), sent: this.pasteSent };
     const where = p.stopLine ? ` – ab Zeile ${p.stopLine} nicht mehr gesendet: „${p.stopText}“` : "";
     const more = " Details: Rechtsklick auf den Tab → Einfüge-Bericht (steht auch im Log).";
-    if (p.state === "done") {
+    const rejected = p.errors?.length ? p.errors[p.errors.length - 1] : null;
+    if (p.state === "error" && rejected && p.done === rejected.line) {
+      this.showPasteError(this.lastPaste); // stopped at the line the device rejected
+    } else if (p.state === "done" && p.errorCount) {
+      toast(`${p.total} Zeilen eingefügt – das Gerät hat ${p.errorCount} davon abgelehnt.`, "err", 15000,
+        [{ label: "Zeigen", action: () => this.showPasteReport() }]);
+    } else if (p.state === "done") {
       toast(`${p.total} Zeilen eingefügt${p.timeouts ? ` – ${p.timeouts} davon ohne bestätigtes Echo, bitte prüfen.${more}` : ", alle bestätigt."}`, p.timeouts ? "info" : "ok", p.timeouts ? 9000 : 4000);
     } else if (p.state === "cancelled") {
       toast(`Einfügen abgebrochen nach ${p.done} von ${p.total} Zeilen${where}.${more}`, "info", 10000);
@@ -529,6 +539,47 @@ export class Tab {
       toast(`Einfügen fehlgeschlagen nach ${p.done} von ${p.total} Zeilen: ${p.error || "unbekannt"}${where}.${more}`, "err", 12000);
     }
     this.mgr.renderTools();
+  }
+
+  /**
+   * The line the device rejected, among the lines around it, with a caret
+   * under the column the device marked and its answer. From here the rest
+   * can be fixed and sent again, or the line skipped.
+   */
+  showPasteError(p) {
+    const e = p.errors[p.errors.length - 1];
+    const { lines = [e.text], offset = 0 } = p.sent || {};
+    const idx = e.line - 1;
+    const num = (i) => String(offset + i + 1);
+    const width = num(Math.min(lines.length, idx + 3)).length;
+    const ctx = [];
+    for (let i = Math.max(0, idx - 3); i <= Math.min(lines.length - 1, idx + 2); i++) {
+      ctx.push(h("div", { class: "pe-line" + (i === idx ? " bad" : i > idx ? " unsent" : "") },
+        h("span", { class: "pe-num" }, num(i).padStart(width)), h("span", {}, lines[i] || " ")));
+      if (i === idx && e.column) {
+        ctx.push(h("div", { class: "pe-line caret" }, h("span", { class: "pe-num" }, " ".repeat(width)), h("span", {}, " ".repeat(e.column - 1) + "^")));
+      }
+    }
+    const rest = lines.slice(idx);
+    const line = offset + e.line;
+    modal((close) => ({
+      head: `Einfügen angehalten: Das Gerät hat Zeile ${line} abgelehnt`,
+      wide: true,
+      body: h("div", { class: "paste-error" },
+        h("div", { class: "pe-code" }, ctx),
+        h("div", { class: "pe-label" }, "Antwort des Geräts"),
+        h("div", { class: "pe-code pe-reply" }, (e.reply?.length ? e.reply : ["(keine Meldung)"]).map((l) => h("div", {}, l))),
+        h("p", { class: "hint" }, (line > 1 ? `Bis Zeile ${line - 1} ist alles eingespielt. ` : "")
+          + `Zeile ${line} hat das Gerät nicht übernommen${rest.length > 1 ? `, ab Zeile ${line + 1} wurde nichts mehr gesendet` : ""}.`
+          + (e.column ? ` Die Markierung zeigt Spalte ${e.column}.` : ""))),
+      foot: [
+        h("button", { class: "btn", onclick: () => close() }, "Beenden"),
+        rest.length > 1 ? h("button", { class: "btn", title: "Diese Zeile auslassen, den Rest ab der nächsten senden",
+          onclick: () => { close(); this.pasteText(rest.slice(1).join("\n"), { offset: line, resume: true, edit: false }); } }, `Zeile ${line} überspringen`) : null,
+        h("button", { class: "btn primary", title: "Den Rest ab dieser Zeile im Einfüge-Fenster öffnen, korrigieren und weiter senden",
+          onclick: () => { close(); this.pasteText(rest.join("\n"), { offset: line - 1, resume: true, edit: true }); } }, "Korrigieren & weiter"),
+      ],
+    })).then(() => this.focus());
   }
 
   /** Report of the last paste: where it stopped and which lines had no echo. */
@@ -545,7 +596,10 @@ export class Tab {
         p.error ? row("Fehler", p.error) : null,
         p.stopLine ? row("Abgebrochen bei", `Zeile ${p.stopLine}: ${p.stopText}`) : null,
         row("Ohne Echo", p.timeouts ? `${p.timeouts} Zeile(n): ${p.misses?.join(", ") || "–"}${p.timeouts > (p.misses?.length || 0) ? " …" : ""}` : "keine – alle Zeilen bestätigt"),
-        h("p", { class: "hint" }, "„Ohne Echo“ heißt: Das Gerät hat die Zeile nicht innerhalb von 3 s zurückgeschickt – z. B. weil ein Befehl lange lief oder eine Rückfrage kam. Diese Zeilen im Terminal bzw. im Log prüfen."),
+        row("Abgelehnt", p.errorCount ? `${p.errorCount} Zeile(n)` : "keine – das Gerät hat keinen Fehler gemeldet"),
+        p.errors?.length ? h("div", { class: "pe-code pe-list" }, p.errors.map((e) => h("div", {},
+          h("b", {}, `Zeile ${(p.sent?.offset || 0) + e.line}: `), e.text.trim(), h("span", { class: "muted" }, `  → ${e.reply?.[0] || "Fehler"}`)))) : null,
+        h("p", { class: "hint" }, "„Ohne Echo“ heißt: Das Gerät hat die Zeile nicht rechtzeitig zurückgeschickt (z. B. Banner, Zertifikat, sehr lange Zeile) – easyTTY wartet dann kurz und macht weiter. „Abgelehnt“ heißt: Das Gerät hat mit einer Fehlermeldung geantwortet."),
         this.logPath ? h("button", { class: "btn", onclick: () => this.revealLog() }, "📄 Log dieser Sitzung zeigen") : null),
       foot: [h("button", { class: "btn primary", onclick: () => close() }, "Schließen")],
     }));

@@ -29,7 +29,7 @@ MCP-Werkzeug hier steht.
 | `Resize` | `tabID: string, cols, rows: int` | `error` | |
 | `Ack` | `tabID: string, n: int` | – | Flusskontrolle: dargestellte Bytes |
 | `SendBreak` | `tabID: string` | `error` | Serial-Break, Tab-Menü „Break senden“ |
-| `Paste` | `tabID, text: string, lineDelayMs: int` | `error` | `<0` = Einstellung, max. 2000; Fortschritt per `paste:progress` |
+| `Paste` | `tabID, text: string, lineDelayMs: int, stopOnError: bool` | `error` | `<0` = Einstellung, max. 2000; Fortschritt per `paste:progress`. Nach jeder Zeile wird die Antwort des Geräts auf Fehlermeldungen geprüft (`% Invalid input`, `Error:`, `syntax error` …, Syslog-Meldungen zählen nicht). `stopOnError` hält bei der ersten abgelehnten Zeile an |
 | `CancelPaste` | `tabID: string` | – | |
 | `SerialLogin` | `tabID: string` | `error` | Nur gespeicherte Serial-Sessions |
 | `TrackTab` | `tabID, title, sessionID: string` | – | Meldet einen Tab für MCP an |
@@ -242,7 +242,7 @@ MCP-Werkzeug hier steht.
 | `term:data:<tabId>` | Base64-String mit Rohdaten |
 | `term:log` | `{id, path}` |
 | `notify` | `{kind, message}`; `ok`, `err`, `info` |
-| `paste:progress` | `{id, state (running/done/cancelled/error), done, total, timeouts, error?, stopLine?, stopText?, misses?}` |
+| `paste:progress` | `{id, state (running/done/cancelled/error), done, total, timeouts, error?, stopLine?, stopText?, misses?, errorCount?, errors?[{line, text, reply[], column?}]}`. `errors` sind die vom Gerät abgelehnten Zeilen (höchstens 50), `column` die Spalte aus der `^`-Markierung |
 | `sftp:progress` | `{jobId, tabId, kind (upload/download), state (running/done/error/cancelled), file, done, total, files, filesDone, skipped, dest?, error?}` |
 | `prompt` | `{id, tabId, kind (hostkey/username/password/passphrase/challenge), title, message, fields[{label,secret,value}], hostKey?}`; `hostKey`: `{host, keyType, fingerprint, changed, oldKeyType?, oldFingerprint?, oldSource?}` |
 | `prompt:cancel` | Prompt-ID (Timeout nach 5 Minuten oder Abbruch) |

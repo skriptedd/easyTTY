@@ -51,6 +51,15 @@ var ErrPasteBusy = errors.New("Es läuft schon ein Einfügen in diesem Tab")
 type PasteOptions struct {
 	LineDelay   time.Duration // extra pause after each line
 	EchoTimeout time.Duration // max wait for the echo of one line (0 = default)
+	StopOnError bool          // stop at the first line the device answers with an error
+}
+
+// PasteError is a line the device rejected ("% Invalid input …").
+type PasteError struct {
+	Line   int      `json:"line"`             // 1-based
+	Text   string   `json:"text"`             // the line as sent
+	Reply  []string `json:"reply"`            // the device's answer below it
+	Column int      `json:"column,omitempty"` // 1-based, from a '^' marker; 0 = unknown
 }
 
 // PasteProgress reports a running paste.
@@ -66,9 +75,40 @@ type PasteProgress struct {
 	StopText string `json:"stopText,omitempty"`
 	// Line numbers (1-based) sent without a confirmed echo, first maxMissList.
 	Misses []int `json:"misses,omitempty"`
+	// Lines the device answered with an error, first maxErrList.
+	Errors     []PasteError `json:"errors,omitempty"`
+	ErrorCount int          `json:"errorCount,omitempty"`
 }
 
-const maxMissList = 100
+const (
+	maxMissList   = 100
+	maxErrList    = 50
+	maxReplyLines = 6
+)
+
+var (
+	// deviceError matches the first line of a CLI's error answer: Cisco/Arista
+	// "% Invalid input detected", Comware "% Unrecognized command found",
+	// Huawei "Error: …", Juniper "syntax error" / "unknown command.",
+	// Aruba "Invalid input: …", Fortinet "Command fail", MikroTik
+	// "bad command name". Warnings ("% Warning: …") do not stop a paste.
+	deviceError = regexp.MustCompile(`(?i)^\s*(` +
+		`%\s*(invalid|incomplete|ambiguous|unrecognized|unknown|bad |error|wrong|cannot|can't|unable|not supported|no such|duplicate)` +
+		`|error\s*[:!]` +
+		`|invalid (input|command)` +
+		`|syntax error` +
+		`|unknown command` +
+		`|command (fail|parse error)` +
+		`|bad command name` +
+		`)`)
+	// syslogLine is a log message that happens to arrive while pasting
+	// ("%LINK-3-UPDOWN: …"), not an answer to the line.
+	syslogLine = regexp.MustCompile(`^\s*%[A-Z0-9_]+-\d-[A-Z0-9_]+\s*:`)
+	// caretLine is the '^' marker under the rejected part of a line.
+	caretLine = regexp.MustCompile(`^ *\^ *$`)
+	// ansiSeq is a colour or cursor code: invisible, so it takes no column.
+	ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+)
 
 // Noter receives easyTTY events for the session log (SessionLog implements it).
 type Noter interface{ Note(text string) }
@@ -102,11 +142,12 @@ func echoTail(line string) string {
 
 // echoWatch collects device output while a paste runs.
 type echoWatch struct {
-	mu   sync.Mutex
-	buf  []byte
-	sig  chan struct{}
-	last time.Time // when the device last sent something
-	fed  int       // bytes received so far (pages are answered once per new output)
+	mu     sync.Mutex
+	buf    []byte
+	before string // last output line before the reset: the prompt the next line is typed after
+	sig    chan struct{}
+	last   time.Time // when the device last sent something
+	fed    int       // bytes received so far (pages are answered once per new output)
 }
 
 func newEchoWatch() *echoWatch { return &echoWatch{sig: make(chan struct{}, 1)} }
@@ -132,8 +173,78 @@ func (w *echoWatch) feed(p []byte) {
 
 func (w *echoWatch) reset() {
 	w.mu.Lock()
+	if i := bytes.LastIndexByte(w.buf, '\n'); i >= 0 {
+		w.before = string(w.buf[i+1:])
+	} else if len(w.buf) > 0 {
+		w.before = string(w.buf)
+	}
 	w.buf = w.buf[:0]
 	w.mu.Unlock()
+}
+
+// rejected looks at the output since the last reset for an error answer to
+// line (sent as number n). The answer is what came between the echo of the
+// line and the final prompt.
+func (w *echoWatch) rejected(n int, line, tail string) (PasteError, bool) {
+	w.mu.Lock()
+	out := strings.Split(ansiSeq.ReplaceAllString(string(w.buf), ""), "\n")
+	before := w.before
+	w.mu.Unlock()
+	echo, start := "", 0
+	for i, l := range out[:len(out)-1] { // the last line is the prompt again
+		if tail == "" || strings.Contains(l, tail) {
+			echo, start = l, i+1
+			break
+		}
+	}
+	answer := out[start : len(out)-1]
+	if start == 0 {
+		answer = out[:len(out)-1] // no echo seen: all of it may be the answer
+	}
+	found := false
+	for _, l := range answer {
+		if deviceError.MatchString(l) && !syslogLine.MatchString(l) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return PasteError{}, false
+	}
+	e := PasteError{Line: n, Text: line}
+	for _, l := range answer {
+		l = strings.TrimRight(l, " \t")
+		switch {
+		case l == "" || syslogLine.MatchString(l):
+		case caretLine.MatchString(l):
+			if e.Column == 0 {
+				e.Column = caretColumn(before, echo, line, strings.IndexByte(l, '^'))
+			}
+		case len(e.Reply) < maxReplyLines:
+			e.Reply = append(e.Reply, l)
+		}
+	}
+	return e, true
+}
+
+// caretColumn turns the position of a '^' marker (counted from the start of
+// the prompt line) into a 1-based column of the sent line; 0 if it does not fit.
+func caretColumn(prompt, echo, line string, caret int) int {
+	prompt, echo = ansiSeq.ReplaceAllString(prompt, ""), ansiSeq.ReplaceAllString(echo, "")
+	full := echo // a device that redraws the line prints its prompt again
+	if prompt == "" || !strings.HasPrefix(echo, prompt) {
+		full = prompt + echo // usually the prompt came before the reset, the echo after it
+	}
+	sent := strings.TrimRight(line, " ")
+	full = strings.TrimRight(full, " ")
+	if !strings.HasSuffix(full, sent) {
+		return 0 // the device shortened the echo (long lines scroll): no column
+	}
+	col := caret - (len(full) - len(sent))
+	if col < 0 || col > len(sent) {
+		return 0
+	}
+	return col + 1
 }
 
 // echoed reports whether tail and then a newline arrived since the last reset.
@@ -272,7 +383,54 @@ func pasteSummary(p PasteProgress) string {
 		}
 		fmt.Fprintf(&b, " – %d Zeile(n) ohne Echo: %s", p.Timeouts, strings.Join(nums, ", "))
 	}
+	if p.ErrorCount > 0 {
+		nums := make([]string, len(p.Errors))
+		for i, e := range p.Errors {
+			nums[i] = fmt.Sprint(e.Line)
+		}
+		fmt.Fprintf(&b, " – %d Zeile(n) vom Gerät abgelehnt: %s", p.ErrorCount, strings.Join(nums, ", "))
+	}
 	return b.String()
+}
+
+// echoPace shortens the wait for an echo to what this device needs: a few
+// times its slowest recent echo. A line whose echo never comes (rewritten
+// by the device, a banner without echo) then costs well under a second
+// instead of the full timeout, while a slow serial line keeps its time.
+type echoPace struct {
+	recent [echoPaceWindow]time.Duration
+	n      int
+}
+
+const (
+	echoPaceWindow = 20
+	echoPaceMin    = 5 // echoes measured before the wait adapts
+	echoPaceFactor = 8
+	echoPaceFloor  = 500 * time.Millisecond
+)
+
+func (e *echoPace) observe(d time.Duration) {
+	e.recent[e.n%echoPaceWindow] = d
+	e.n++
+}
+
+// wait is the echo timeout for the next line (never above max).
+func (e *echoPace) wait(max time.Duration) time.Duration {
+	if e.n < echoPaceMin {
+		return max
+	}
+	slowest := time.Duration(0)
+	for _, d := range e.recent[:min(e.n, echoPaceWindow)] {
+		slowest = maxDur(slowest, d)
+	}
+	return min(max, maxDur(echoPaceFloor, slowest*echoPaceFactor))
+}
+
+func maxDur(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // Paste sends text line by line, each followed by CR, waiting for the echo of
@@ -298,6 +456,7 @@ func (m *Manager) Paste(ctx context.Context, id, text string, opts PasteOptions,
 	t.note(fmt.Sprintf("Einfügen gestartet: %d Zeilen (zeilenweise mit Echo)", len(lines)))
 	last := time.Now()
 	misses := 0
+	var pace echoPace
 	prompt := "" // device name from its prompt, learned while pasting
 	finish := func(state string, err error) error {
 		p.State = state
@@ -317,14 +476,17 @@ func (m *Manager) Paste(ctx context.Context, id, text string, opts PasteOptions,
 			return finish("cancelled", nil)
 		}
 		w.reset()
+		sent := time.Now()
 		if _, err := t.conn.Write([]byte(line + "\r")); err != nil {
 			return finish("error", err)
 		}
-		wait := timeout
+		wait := pace.wait(timeout)
 		if misses >= missesBeforeShort && shortEchoTimeout < wait {
 			wait = shortEchoTimeout // device does not echo: degrade to fixed pacing
 		}
-		if w.wait(ctx, t.done, echoTail(line), wait) {
+		tail := echoTail(line)
+		if w.wait(ctx, t.done, tail, wait) {
+			pace.observe(time.Since(sent))
 			misses = 0
 			w.settle(ctx, t.done, &prompt, func() error {
 				_, err := t.conn.Write([]byte(" "))
@@ -342,13 +504,22 @@ func (m *Manager) Paste(ctx context.Context, id, text string, opts PasteOptions,
 				p.Misses = append(p.Misses, i+1)
 			}
 		}
+		p.Done++
+		if e, bad := w.rejected(i+1, line, tail); bad {
+			p.ErrorCount++
+			if len(p.Errors) < maxErrList {
+				p.Errors = append(p.Errors, e)
+			}
+			if opts.StopOnError {
+				return finish("error", fmt.Errorf("Das Gerät hat Zeile %d abgelehnt", i+1))
+			}
+		}
 		if opts.LineDelay > 0 {
 			select {
 			case <-time.After(opts.LineDelay):
 			case <-ctx.Done():
 			}
 		}
-		p.Done++
 		if time.Since(last) >= pasteReportEvery {
 			last = time.Now()
 			report(p)
